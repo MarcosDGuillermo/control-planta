@@ -276,6 +276,14 @@
         <input id="humSalida" type="number" step="0.1" value="15.6" style="width:64px;padding:4px 6px;border:1px solid var(--linea);font:inherit;">
       </label>
     </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:6px;">
+      <label style="font-size:11px;color:var(--tenue);display:flex;flex-direction:column;gap:2px;">Va al silo
+        <select id="destinoPasada" style="padding:4px 6px;border:1px solid var(--linea);font:inherit;max-width:190px;"></select>
+      </label>
+      <label style="font-size:11px;color:var(--tenue);display:flex;flex-direction:column;gap:2px;" id="destino2Box" hidden>Lo que no entre, al silo
+        <select id="destino2Pasada" style="padding:4px 6px;border:1px solid var(--linea);font:inherit;max-width:190px;"></select>
+      </label>
+    </div>
     <div class="rot" style="margin-top:4px;">Al empezar</div>
     <div class="plantas">
       <button id="sentAriba" aria-pressed="true">Copete arriba</button>
@@ -312,6 +320,7 @@
     <div class="rot">Cubicaje</div>
     <div class="botones">
       <button id="opCubicaje">Ver informe</button>
+      <button id="opSalidas">Salidas y recorridas</button>
     </div>
   </div>
   <div class="grupo" id="grupoInformeSecado">
@@ -413,6 +422,48 @@
 
     <div class="mandos">
       <button class="cerrar" id="configCerrar">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<div class="cubicaje" id="modalSalidas">
+  <div class="hoja">
+    <img data-logo alt="Cereales Lobería" style="width:60px;height:60px;display:block;margin-bottom:8px;">
+    <h2>Salidas y recorridas</h2>
+    <p class="sub">Registrá cada salida con los kg de balanza. Si no sabés de qué silo salió, queda sin confirmar y se reparte en la próxima recorrida, cuando anotes las chapas reales.</p>
+
+    <h3 class="gas-h solo-pantalla" style="margin-top:6px;">Nueva salida</h3>
+    <div class="gas-form solo-pantalla">
+      <label>Fecha <input type="date" id="salFecha"></label>
+      <label>Cereal <select id="salCereal"><option value="soja">Soja</option><option value="maiz">Maíz</option><option value="trigo">Trigo</option><option value="cebada">Cebada forrajera</option><option value="cervecera">Cebada cervecera</option><option value="girasol">Girasol</option></select></label>
+      <label>Kg de balanza <input type="number" id="salKg" min="0" step="1" inputmode="decimal" style="width:110px;"></label>
+      <label>Salió del silo <select id="salSilo" style="min-width:190px;"></select></label>
+      <label>N° carta de porte <input type="text" id="salCarta" style="width:150px;"></label>
+      <label>Notas <input type="text" id="salNotas" style="width:140px;"></label>
+      <button class="fuerte" id="salGuardar">Guardar salida</button>
+    </div>
+    <p class="gas-preview" id="salPreview"></p>
+    <p class="gas-estado" id="salEstado"></p>
+    <p class="nota" id="salPendiente"></p>
+    <div id="salTabla"></div>
+
+    <h3 class="gas-h">Recorrida de control</h3>
+    <p class="sub solo-pantalla" style="margin:0 0 4px;">Anotá las chapas reales y la forma de arriba de los silos que mediste; dejá vacíos los demás. Conviene medir juntos todos los silos de un mismo cereal.</p>
+    <div class="gas-form solo-pantalla">
+      <label>Fecha <input type="date" id="recFecha"></label>
+      <label>Notas <input type="text" id="recNotas" style="width:200px;"></label>
+    </div>
+    <div id="recTabla" class="solo-pantalla"></div>
+    <div class="gas-form solo-pantalla"><button class="fuerte" id="recGuardar">Guardar recorrida</button></div>
+    <p class="gas-estado" id="recEstado"></p>
+
+    <h3 class="gas-h">Recorridas anteriores</h3>
+    <div id="recHistorial"></div>
+    <p class="pie">"Según app" es lo que el cubicaje esperaba antes de la recorrida. Si un silo bajó más de lo registrado, primero se le asignan las salidas sin confirmar de ese cereal, en proporción a cuánto bajó cada silo. "Faltan" es lo que bajó y no se explica con salidas (merma, error de lectura o una salida sin registrar); "sobran" es lo que hay de más (por ejemplo, una mezcla). Las toneladas se calculan por cubicaje con la densidad de cada cereal.</p>
+
+    <div class="mandos">
+      <button class="imprimir" id="salImprimir">Imprimir</button>
+      <button class="cerrar" id="salCerrar">Cerrar</button>
     </div>
   </div>
 </div>
@@ -619,6 +670,37 @@ function volumenSilo(f, d) {
   return Math.max(vol, 0);
 }
 
+/* lugar en un silo: lleno hasta el techo con copete */
+const capacidadM3 = f => f.conoInf + f.m3Cilindro + f.m3Copete;
+function libreTn(it, cereal) {
+  return Math.max(0, capacidadM3(it.fam) - volumenSilo(it.fam, it.dato)) * (DENSIDAD[cereal] || 0.7);
+}
+/* carga tn en un silo por volumen (no por cantidad de chapas: cada familia tiene otro diámetro).
+   Al llenar desde arriba se forma copete. Devuelve las tn que efectivamente entraron. */
+function cargarEnSilo(it, tn, cereal) {
+  const f = it.fam, d = it.dato, dens = DENSIDAD[cereal] || 0.7;
+  const entra = Math.min(tn, libreTn(it, cereal));
+  if (entra <= 0) return 0;
+  const V = volumenSilo(f, d) + entra / dens;
+  const ch = (V - f.conoInf - f.m3Copete) / f.m3PorChapa;
+  if (ch >= 0) { d.chapas = Math.min(f.chapas, ch); d.copete = 1; }
+  else { d.chapas = Math.max(0.01, (V - f.conoInf) / f.m3PorChapa); d.copete = 0; }
+  d.chapas = Math.round(d.chapas * 100) / 100;
+  d.cereal = cereal;
+  if (d.mezcla) { d.mezcla.repaso = 0; d.mezcla.nuevo = d.chapas; }
+  return entra;
+}
+/* silos que pueden recibir lo secado: con cubicaje, sin semilla y que no sean el previo */
+function silosDestino(cereal) {
+  return items.filter(it => it.tipo === 'silo' && !it.fam.aOjo && !it.fam.aereo && !it.dato.semilla
+    && datos.circuito && String(it.dato.id) !== String(datos.circuito.previo))
+    .map(it => ({ it, id: it.dato.id, libre: libreTn(it, cereal),
+      otroCereal: it.dato.chapas > 0.01 && it.dato.cereal !== cereal ? it.dato.cereal : null }))
+    .sort((a, b) => Number(a.id) - Number(b.id));
+}
+/* lo secado pierde peso por el agua que se le saca */
+const tnSecas = (tn, hEnt, hSal) => hSal < 100 ? tn * (100 - hEnt) / (100 - hSal) : tn;
+
 /* Tubos de gas: 3 tanques Lapesa de propano, 6,43 m³ de capacidad de agua cada uno (según chapa).
    El reloj marca el % de líquido sobre esa capacidad. */
 const TUBOS_GAS = {
@@ -737,6 +819,10 @@ function aplicarCubicajeRemoto(datosPlanta) {
     if (!s) return;
     if (fila.Cereal) s.cereal = String(fila.Cereal).toLowerCase();
     if (s.semilla) s.variedad = fila.Notas ? String(fila.Notas) : '';
+    if (fila.Sentido) {
+      const t = String(fila.Sentido).toLowerCase();
+      s.copete = t.includes('arriba') ? 1 : t.includes('abajo') ? -1 : 0;
+    }
     if (fila.Chapas !== undefined && fila.Chapas !== '') {
       s.chapas = Number(fila.Chapas);
       if (s.mezcla) { s.mezcla.repaso = 0; s.mezcla.nuevo = s.chapas; }
@@ -1448,7 +1534,7 @@ function opIngreso(chapas, cereal = 'maiz') {
 }
 
 /* sale hacia la secadora y va al silo de enfriado según el cereal */
-function opSecar(chapas, humEntrada = 18.2, humSalida = 15.6, sentido = 'arriba', pasada = 1, fecha = null, cerealElegido = null, copeteFinal = null) {
+function opSecar(chapas, humEntrada = 18.2, humSalida = 15.6, sentido = 'arriba', pasada = 1, fecha = null, cerealElegido = null, copeteFinal = null, destinos = null) {
   const org = porId(datos.circuito.previo);
   const d = org.dato;
   chapas = Math.min(chapas, d.chapas);
@@ -1472,10 +1558,19 @@ function opSecar(chapas, humEntrada = 18.2, humSalida = 15.6, sentido = 'arriba'
   if (copeteFinal !== null && copeteFinal !== undefined) d.copete = copeteFinal;
   if (d.chapas < 0.01) { d.chapas = 0; d.copete = 0; d.mezcla.repaso = 0; d.mezcla.nuevo = 0; }
 
-  const idDestino = d.cereal === 'soja' ? datos.circuito.soja : datos.circuito.maiz;
-  const destino = porId(idDestino);
-  destino.dato.cereal = d.cereal;
-  destino.dato.chapas = Math.min(destino.fam.chapas, destino.dato.chapas + chapas);
+  /* destino: el elegido en pantalla, o el del circuito según el cereal. Lo que no entra va al segundo. */
+  const idPrincipal = destinos && destinos.principal ? destinos.principal : (cereal === 'soja' ? datos.circuito.soja : datos.circuito.maiz);
+  let resto = tnSecas(tn, humEntrada, humSalida);
+  const usados = [];
+  [idPrincipal, destinos && destinos.secundario].forEach(id => {
+    const it = id ? porId(id) : null;
+    if (!it || resto <= 0.01) return;
+    const entro = cargarEnSilo(it, resto, cereal);
+    if (entro > 0) { usados.push(it.dato.id); resto -= entro; }
+  });
+  const idDestino = usados.length ? usados.join(' + ') : idPrincipal;
+  ultimosDestinos = usados;
+  if (resto > 0.01) anotar(`No entró todo: quedaron ≈ ${num(resto, 1)} tn sin lugar en el silo ${idDestino}`);
 
   const puntos = Math.max(humEntrada - humSalida, 0);
   const gas = tn * puntos * KG_GAS_POR_TN_PUNTO;
@@ -1869,8 +1964,9 @@ function pintarPaso() {
       const tnMov = estimarTn(it, chapasPaso, cerealCalc, copeteFinalPaso);
       const tnTotal = volumenSilo(it.fam, it.dato) * (DENSIDAD[it.dato.cereal] || 0.7);
       const copeteTxt = ' — ' + textoForma(it.dato.copete || 0) + ' → ' + textoForma(copeteFinalPaso);
+      const dest = pintarDestinos(cerealCalc, tnMov);
       kgEl.innerHTML = `Vas a mover ≈ ${num(tnMov * 1000, 0)} kg (${nombreCereal(cerealCalc)}, ${pasadaActual}° pasada${copeteTxt})<br>` +
-        `Hay en total en el silo ${it.dato.id} ≈ ${num(tnTotal * 1000, 0)} kg`;
+        `Hay en total en el silo ${it.dato.id} ≈ ${num(tnTotal * 1000, 0)} kg` + (dest ? '<br>' + dest : '');
     } else {
       kgEl.textContent = '';
     }
@@ -1878,6 +1974,35 @@ function pintarPaso() {
     kgEl.textContent = '';
   }
 }
+/* arma los selectores de destino y devuelve el texto de cómo se reparte lo secado */
+function pintarDestinos(cereal, tnMov) {
+  const sel = $('destinoPasada'), sel2 = $('destino2Pasada'), caja = $('destino2Box');
+  if (!sel || !datos || !datos.circuito) return '';
+  const lista = silosDestino(cereal);
+  const porDefecto = cereal === 'soja' ? datos.circuito.soja : datos.circuito.maiz;
+  const valido = id => lista.some(o => String(o.id) === String(id) && !o.otroCereal);
+  const elegido = destinoManual !== null && valido(destinoManual) ? destinoManual : porDefecto;
+  const opcion = (o, marcado) => `<option value="${o.id}"${o.otroCereal ? ' disabled' : ''}${marcado ? ' selected' : ''}>Silo ${o.id} · ${o.otroCereal ? 'tiene ' + nombreCereal(o.otroCereal).toLowerCase() : o.libre < 0.5 ? 'lleno' : 'lugar ≈ ' + num(o.libre) + ' tn'}</option>`;
+  sel.innerHTML = lista.map(o => opcion(o, String(o.id) === String(elegido))).join('');
+  const hEnt = Number($('humEntrada').value) || 0, hSal = Number($('humSalida').value) || 0;
+  const tnDest = tnSecas(tnMov, hEnt, hSal);
+  const principal = lista.find(o => String(o.id) === String(sel.value));
+  const libre1 = principal ? principal.libre : 0;
+  if (tnDest <= libre1 + 0.01) { caja.hidden = true; return `Entra en el silo ${sel.value}: le quedan ≈ ${num(libre1 - tnDest)} tn de lugar.`; }
+  caja.hidden = false;
+  const otros = lista.filter(o => String(o.id) !== String(sel.value));
+  const ok2 = destino2Manual && otros.some(o => String(o.id) === String(destino2Manual) && !o.otroCereal);
+  sel2.innerHTML = `<option value=""${ok2 ? '' : ' selected'}>Elegí un silo</option>` + otros.map(o => opcion(o, ok2 && String(o.id) === String(destino2Manual))).join('');
+  const falta = tnDest - libre1;
+  const segundo = otros.find(o => String(o.id) === String(sel2.value));
+  if (!segundo) return `<span style="color:var(--alerta)">No entra todo en el silo ${sel.value}: entran ≈ ${num(libre1)} tn y sobran ≈ ${num(falta)} tn. Elegí a qué silo va el resto.</span>`;
+  const sobra = Math.max(0, falta - segundo.libre);
+  return `≈ ${num(libre1)} tn al silo ${sel.value} (se llena) y ≈ ${num(Math.min(falta, segundo.libre))} tn al silo ${segundo.id}` +
+    (sobra > 0.01 ? ` <span style="color:var(--alerta)">— todavía sobran ≈ ${num(sobra)} tn</span>` : '.');
+}
+$('destinoPasada').onchange = e => { destinoManual = e.target.value; destino2Manual = ''; pintarPaso(); };
+$('destino2Pasada').onchange = e => { destino2Manual = e.target.value; pintarPaso(); };
+['humEntrada', 'humSalida'].forEach(id => $(id).addEventListener('input', () => pintarPaso()));
 $('menos').onclick = () => { chapasPaso = Math.max(0.5, chapasPaso - 0.5); pintarPaso(); };
 $('mas').onclick   = () => { chapasPaso = Math.min(11, chapasPaso + 0.5); pintarPaso(); };
 function marcarPrevio(id) {
@@ -1896,6 +2021,8 @@ $('prev3').onclick = () => { marcarPrevio(3); if ($('cerealPasada')) $('cerealPa
 $('prev1').onclick = () => { marcarPrevio(1); if ($('cerealPasada')) $('cerealPasada').value = 'soja'; pintarTodo(); pintarPaso(); reflejarCopetePrevio(); };
 
 let pasadaActual = 1;
+let ultimosDestinos = [];
+let destinoManual = null, destino2Manual = '';
 let copeteFinalPaso = -1;   /* al vaciar desde abajo, lo normal es que termine con el cono para abajo */
 const textoForma = v => v === 1 ? 'copete arriba' : v === -1 ? 'copete abajo' : 'enrasado';
 function marcarCopeteFinal(v) {
@@ -1925,7 +2052,7 @@ $('finEnrasado').onclick = () => marcarCopeteFinal(0);
 $('finAbajo').onclick = () => marcarCopeteFinal(-1);
 $('pasada1').onclick = () => { pasadaActual = 1; $('pasada1').setAttribute('aria-pressed','true'); $('pasada2').setAttribute('aria-pressed','false'); pintarPaso(); };
 $('pasada2').onclick = () => { pasadaActual = 2; $('pasada2').setAttribute('aria-pressed','true'); $('pasada1').setAttribute('aria-pressed','false'); pintarPaso(); };
-if ($('cerealPasada')) $('cerealPasada').onchange = pintarPaso;
+if ($('cerealPasada')) $('cerealPasada').onchange = () => { destinoManual = null; destino2Manual = ''; pintarPaso(); };
 
 let moduloActual = 'cubicaje';
 function setModulo(m) {
@@ -1959,13 +2086,17 @@ $('opSecar').onclick   = () => {
   const cerealElegido = $('cerealPasada') ? $('cerealPasada').value : null;
   const itPrevio = porId(datos.circuito.previo);
   const sentidoLog = textoForma(itPrevio ? (itPrevio.dato.copete || 0) : 0) + ' → ' + textoForma(copeteFinalPaso);
-  const tnReal = opSecar(chapasPaso, hEnt, hSal, sentidoLog, pasadaActual, fecha, cerealElegido, copeteFinalPaso);
+  const principal = $('destinoPasada') && $('destinoPasada').value ? $('destinoPasada').value : null;
+  const secundario = $('destino2Box') && !$('destino2Box').hidden && $('destino2Pasada').value ? $('destino2Pasada').value : null;
+  if ($('destino2Box') && !$('destino2Box').hidden && !secundario &&
+      !confirm(`No entra todo en el silo ${principal}. Si seguís sin elegir otro silo, lo que sobra no queda ubicado en ningún lado. ¿Registrar igual?`)) return;
+  const tnReal = opSecar(chapasPaso, hEnt, hSal, sentidoLog, pasadaActual, fecha, cerealElegido, copeteFinalPaso, { principal, secundario });
   if (tnReal !== undefined) {
     $('kgResultado').textContent = `Última pasada: ${num(tnReal * 1000, 0)} kg secados`;
   }
   reflejarCopetePrevio();
   pintarPaso();
-  sincronizarCubicaje(SILOS_CIRCUITO);
+  sincronizarCubicaje([...new Set([...SILOS_CIRCUITO, ...ultimosDestinos])]);
 };
 $('opRepaso').onclick  = () => { opRepaso(chapasPaso); sincronizarCubicaje(SILOS_CIRCUITO); };
 $('btnMonaco').onclick = () => { cargarPlanta('monaco'); pintarPaso(); reflejarCopetePrevio(); if ($('kgResultado')) $('kgResultado').textContent = ''; };
@@ -2937,6 +3068,271 @@ $('facCarga').addEventListener('change', completarDesdeCarga);
 ['facKg', 'facImporte', 'facTC'].forEach(id => $(id).addEventListener('input', pintarPreviewFactura));
 $('facGuardar').onclick = guardarFactura;
 
+/* ============================================================
+   SALIDAS DE SILOS Y RECORRIDAS DE CONTROL
+   - Cada salida se registra con los kg de balanza. Si se sabe el silo, se le descuenta por cubicaje.
+   - Si no se sabe, queda "sin confirmar" (por cereal) y no se le resta a ningún silo.
+   - En la recorrida se anotan las chapas reales: lo que un silo bajó de más se explica primero con
+     las salidas sin confirmar de ese cereal; lo que sobra queda como diferencia.
+   ============================================================ */
+let salidasSilos = [], recorridas = [];
+
+/* "6=50000|4=10000" ↔ { '6': 50000, '4': 10000 } */
+const leerAsignado = t => {
+  const out = {};
+  String(t || '').split('|').forEach(p => { const [id, kg] = p.split('='); if (id && Number(kg) > 0) out[id.trim()] = Number(kg); });
+  return out;
+};
+const escribirAsignado = o => Object.keys(o).filter(k => o[k] > 0.5).map(k => `${k}=${Math.round(o[k])}`).join('|');
+
+function normSalida(r) {
+  return {
+    ID: String(r.ID || ''), fecha: String(r.Fecha || '').slice(0, 10), cereal: String(r.Cereal || '').toLowerCase(),
+    kg: Number(r.Kg) || 0, silo: r.SiloID !== undefined && r.SiloID !== '' ? String(r.SiloID) : '',
+    carta: r.CartaPorte ? String(r.CartaPorte) : '', notas: r.Notas ? String(r.Notas) : '',
+    asignado: leerAsignado(r.Asignado)
+  };
+}
+const filaSalida = s => ({ ID: s.ID, Fecha: s.fecha, Cereal: s.cereal, Kg: s.kg, SiloID: s.silo, CartaPorte: s.carta, Notas: s.notas, Asignado: escribirAsignado(s.asignado) });
+const kgAsignados = s => Object.values(s.asignado).reduce((a, b) => a + b, 0);
+const kgPendientes = s => s.silo ? 0 : Math.max(0, s.kg - kgAsignados(s));
+function pendientePorCereal() {
+  const p = {};
+  salidasSilos.forEach(s => { const k = kgPendientes(s); if (k > 0.5) p[s.cereal] = (p[s.cereal] || 0) + k; });
+  return p;
+}
+function cargarSalidasRecorridas(remoto) {
+  salidasSilos = ((remoto && remoto.SalidasSilos) || []).map(normSalida).filter(s => s.ID && s.kg > 0)
+    .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.ID.localeCompare(b.ID));
+  recorridas = ((remoto && remoto.Recorridas) || []).filter(r => r.ID)
+    .sort((a, b) => String(b.Fecha).localeCompare(String(a.Fecha)) || String(b.ID).localeCompare(String(a.ID)));
+}
+
+/* saca tn de un silo por cubicaje: se vacía desde abajo, así que arriba queda pozo */
+function sacarDeSilo(it, tn, cereal) {
+  const f = it.fam, d = it.dato, dens = DENSIDAD[cereal] || 0.7;
+  const hay = volumenSilo(f, d) * dens;
+  const sale = Math.min(tn, hay);
+  const V = (hay - sale) / dens;
+  if (V <= 0.01) { d.chapas = 0; d.copete = 0; }
+  else {
+    const ch = (V - f.conoInf + f.m3Pozo) / f.m3PorChapa;
+    if (ch <= f.chapas) { d.chapas = Math.max(0.01, ch); d.copete = -1; }
+    else { d.chapas = f.chapas; d.copete = 0; }
+    d.chapas = Math.round(d.chapas * 100) / 100;
+  }
+  if (d.mezcla) { d.mezcla.repaso = 0; d.mezcla.nuevo = d.chapas; }
+  return sale;
+}
+
+/* silos con cubicaje (sin aéreos ni semilla) */
+const silosConCubicaje = () => items.filter(it => it.tipo === 'silo' && !it.fam.aOjo && !it.fam.aereo && !it.dato.semilla)
+  .sort((a, b) => Number(a.dato.id) - Number(b.dato.id));
+const tnDeSilo = it => volumenSilo(it.fam, it.dato) * (DENSIDAD[it.dato.cereal] || 0.7);
+/* silos de donde puede salir ese cereal ya seco: tienen ese cereal y no son previos de la secadora */
+function silosSecosCon(cereal) {
+  const previos = (datos.circuito && datos.circuito.previos) || [];
+  return silosConCubicaje().filter(it => it.dato.chapas > 0.01 && it.dato.cereal === cereal && !previos.map(String).includes(String(it.dato.id)));
+}
+
+function estadoSal(msg, mal) { $('salEstado').textContent = msg; $('salEstado').classList.toggle('mal', !!mal); }
+function estadoRec(msg, mal) { $('recEstado').textContent = msg; $('recEstado').classList.toggle('mal', !!mal); }
+const tnTxt = kg => num(kg / 1000, 1) + ' tn';
+
+function pintarSelectSiloSalida() {
+  const cereal = $('salCereal').value, sel = $('salSilo'), previo = sel.value;
+  const opciones = silosConCubicaje().map(it => {
+    const d = it.dato, otro = d.chapas > 0.01 && d.cereal !== cereal, vacio = d.chapas <= 0.01;
+    const txt = `Silo ${d.id} · ${vacio ? 'vacío' : otro ? 'tiene ' + nombreCereal(d.cereal).toLowerCase() : '≈ ' + num(tnDeSilo(it)) + ' tn'}`;
+    return `<option value="${d.id}"${otro || vacio ? ' disabled' : ''}>${txt}</option>`;
+  }).join('');
+  sel.innerHTML = '<option value="">No sé de qué silo salió</option>' + opciones;
+  if (previo && sel.querySelector(`option[value="${previo}"]:not([disabled])`)) sel.value = previo;
+  pintarPreviewSalida();
+}
+
+function pintarPreviewSalida() {
+  const kg = Number($('salKg').value) || 0, cereal = $('salCereal').value, silo = $('salSilo').value;
+  let t = '';
+  if (kg > 0 && silo) {
+    const it = porId(silo), hay = it ? tnDeSilo(it) * 1000 : 0;
+    t = kg > hay + 1 ? `El silo ${silo} tiene ≈ ${tnTxt(hay)} según el cubicaje: se va a vaciar y faltan ≈ ${tnTxt(kg - hay)}. Revisalo en la próxima recorrida.`
+      : `Al silo ${silo} le quedan ≈ ${tnTxt(hay - kg)} después de esta salida.`;
+  } else if (kg > 0) {
+    const secos = silosSecosCon(cereal);
+    t = secos.length === 1 ? `Solo hay un silo con ${nombreCereal(cereal).toLowerCase()} seco (el ${secos[0].dato.id}): se le descuenta directo.`
+      : `Queda sin confirmar. Se reparte en la próxima recorrida de ${nombreCereal(cereal).toLowerCase()}.`;
+  }
+  $('salPreview').textContent = t;
+}
+
+async function guardarSalida() {
+  const kg = Number($('salKg').value) || 0, cereal = $('salCereal').value;
+  let silo = $('salSilo').value;
+  if (!$('salFecha').value || !(kg > 0)) { estadoSal('Faltan la fecha o los kg de balanza.', true); return; }
+  if (!silo) { const secos = silosSecosCon(cereal); if (secos.length === 1) silo = String(secos[0].dato.id); }
+  const s = { ID: 'S' + Date.now(), fecha: $('salFecha').value, cereal, kg, silo, carta: $('salCarta').value.trim(), notas: $('salNotas').value.trim(), asignado: {} };
+  $('salGuardar').disabled = true;
+  const res = await postSheet('SalidasSilos', 'upsert', filaSalida(s), 'ID');
+  $('salGuardar').disabled = false;
+  if (!subidaOk(res)) { estadoSal('No se pudo guardar en la pestaña SalidasSilos' + (res && res.error ? ` (${res.error})` : '') + '. Revisá la conexión y que la pestaña exista.', true); return; }
+  salidasSilos.push(s);
+  if (silo) {
+    const it = porId(silo);
+    if (it) { sacarDeSilo(it, kg / 1000, cereal); sincronizarCubicaje([it.dato.id]); }
+  }
+  anotar(`Salida de ${tnTxt(kg)} de ${nombreCereal(cereal).toLowerCase()}${silo ? ' del silo ' + silo : ' (silo sin confirmar)'}`);
+  estadoSal(silo ? `Guardada y descontada del silo ${silo}.` : 'Guardada como sin confirmar.');
+  $('salKg').value = ''; $('salCarta').value = ''; $('salNotas').value = '';
+  pintarTodo();
+  pintarSalidas();
+}
+
+async function borrarSalida(id) {
+  const s = salidasSilos.find(x => x.ID === id);
+  if (!s || !confirm(`¿Borrar la salida de ${tnTxt(s.kg)} del ${s.fecha.split('-').reverse().join('/')}? Si ya se descontó de un silo, no se vuelve a sumar: corregilo en la próxima recorrida.`)) return;
+  const res = await postSheet('SalidasSilos', 'delete', { ID: id }, 'ID');
+  if (!subidaOk(res)) { estadoSal('No se pudo borrar de la Sheet. Probá de nuevo.', true); return; }
+  salidasSilos = salidasSilos.filter(x => x.ID !== id);
+  estadoSal('Salida borrada.');
+  pintarSalidas();
+}
+
+/* ---- recorrida ---- */
+function pintarFormRecorrida() {
+  $('recTabla').innerHTML = `<div class="tabla-scroll"><table>
+    <thead><tr><th>Silo</th><th>Según la app</th><th>Cereal</th><th>Chapas reales</th><th>Arriba</th></tr></thead>
+    <tbody>${silosConCubicaje().map(it => {
+      const d = it.dato, f = it.fam;
+      const esp = d.chapas > 0.01 ? `${num(d.chapas, d.chapas % 1 ? 1 : 0)} ch. ${d.copete === 1 ? '▲' : d.copete === -1 ? '▼' : ''} · ${nombreCereal(d.cereal).toLowerCase()} ≈ ${num(tnDeSilo(it))} tn` : 'vacío';
+      return `<tr data-silo="${d.id}">
+        <td>${d.id}</td><td class="izq">${esp}</td>
+        <td><select data-r="cereal" style="padding:3px 5px;border:1px solid var(--linea);font:inherit;">${Object.keys(DENSIDAD).map(c => `<option value="${c}"${c === d.cereal ? ' selected' : ''}>${nombreCereal(c)}</option>`).join('')}</select></td>
+        <td><input type="number" data-r="chapas" min="0" max="${f.chapas}" step="0.25" inputmode="decimal" placeholder="no medido" style="width:90px;padding:3px 5px;border:1px solid var(--linea);font:inherit;"></td>
+        <td><select data-r="forma" style="padding:3px 5px;border:1px solid var(--linea);font:inherit;"><option value="1"${d.copete === 1 ? ' selected' : ''}>Copete arriba</option><option value="0"${!d.copete ? ' selected' : ''}>Enrasado</option><option value="-1"${d.copete === -1 ? ' selected' : ''}>Copete abajo</option></select></td>
+      </tr>`;
+    }).join('')}</tbody></table></div>`;
+}
+
+async function guardarRecorrida() {
+  const filas = [...$('recTabla').querySelectorAll('tr[data-silo]')].map(tr => ({
+    id: tr.dataset.silo, chapas: tr.querySelector('[data-r="chapas"]').value,
+    cereal: tr.querySelector('[data-r="cereal"]').value, forma: +tr.querySelector('[data-r="forma"]').value
+  })).filter(r => r.chapas !== '');
+  if (!filas.length) { estadoRec('No anotaste ningún silo. Dejá vacíos solo los que no mediste.', true); return; }
+  const fecha = $('recFecha').value || hoyLocal(), recID = 'R' + Date.now();
+  /* esperado vs real, en tn */
+  const medidos = filas.map(r => {
+    const it = porId(r.id), f = it.fam;
+    const real = { chapas: Math.min(f.chapas, Math.max(0, Number(r.chapas))), copete: Number(r.chapas) > 0 ? r.forma : 0 };
+    const tnEsp = tnDeSilo(it), tnReal = volumenSilo(f, real) * (DENSIDAD[r.cereal] || 0.7);
+    return { it, r, real, tnEsp, tnReal, bajo: Math.max(0, tnEsp - tnReal), asignadoKg: 0 };
+  });
+  /* las salidas sin confirmar de cada cereal se reparten entre los silos de ese cereal que bajaron de más */
+  const pend = pendientePorCereal();
+  Object.keys(pend).forEach(cereal => {
+    const candidatos = medidos.filter(m => m.r.cereal === cereal && m.bajo > 0.01);
+    const totalBajo = candidatos.reduce((a, m) => a + m.bajo * 1000, 0);
+    if (!totalBajo) return;
+    let aRepartir = Math.min(pend[cereal], totalBajo);
+    candidatos.forEach(m => { m.asignadoKg = aRepartir * (m.bajo * 1000) / totalBajo; });
+    /* se imputan a las salidas pendientes en orden de fecha */
+    const cupo = {}; candidatos.forEach(m => { cupo[m.r.id] = m.asignadoKg; });
+    salidasSilos.filter(s => s.cereal === cereal && kgPendientes(s) > 0.5).forEach(s => {
+      let falta = kgPendientes(s);
+      Object.keys(cupo).forEach(id => {
+        if (falta <= 0.5 || cupo[id] <= 0.5) return;
+        const k = Math.min(falta, cupo[id]);
+        s.asignado[id] = (s.asignado[id] || 0) + k; cupo[id] -= k; falta -= k;
+        s._cambio = true;
+      });
+    });
+  });
+  $('recGuardar').disabled = true;
+  let errores = 0;
+  for (const m of medidos) {
+    const dif = m.tnEsp - m.tnReal - m.asignadoKg / 1000;   /* + = faltante sin explicar, − = sobrante */
+    const res = await postSheet('Recorridas', 'append', {
+      ID: recID, Fecha: fecha, SiloID: m.r.id, Cereal: nombreCereal(m.r.cereal),
+      ChapasApp: +m.it.dato.chapas.toFixed(2), Chapas: m.real.chapas, Sentido: textoForma(m.real.copete),
+      TnApp: +m.tnEsp.toFixed(2), TnReales: +m.tnReal.toFixed(2), TnSinConfirmar: +(m.asignadoKg / 1000).toFixed(2),
+      Diferencia: +dif.toFixed(2), Notas: $('recNotas').value.trim()
+    });
+    if (!subidaOk(res)) errores++;
+  }
+  for (const s of salidasSilos.filter(x => x._cambio)) {
+    const res = await postSheet('SalidasSilos', 'upsert', filaSalida(s), 'ID');
+    if (subidaOk(res)) delete s._cambio; else errores++;
+  }
+  $('recGuardar').disabled = false;
+  if (errores) { estadoRec(`Hubo ${errores} escritura${errores > 1 ? 's' : ''} que no llegaron a la Sheet. Revisá que existan las pestañas Recorridas y SalidasSilos, y volvé a abrir esta pantalla antes de repetir.`, true); return; }
+  /* los silos medidos pasan a su valor real */
+  medidos.forEach(m => {
+    const d = m.it.dato;
+    d.chapas = m.real.chapas; d.copete = m.real.copete; d.cereal = m.r.cereal;
+    if (d.mezcla) { d.mezcla.repaso = 0; d.mezcla.nuevo = d.chapas; }
+  });
+  sincronizarCubicaje(medidos.map(m => m.r.id));
+  const remoto = await fetchSheet();
+  if (remoto) cargarSalidasRecorridas(remoto);
+  anotar(`Recorrida del ${fecha.split('-').reverse().join('/')}: ${medidos.length} silos controlados`);
+  estadoRec('Recorrida guardada. Los silos medidos quedaron con su valor real.');
+  $('recNotas').value = '';
+  pintarTodo();
+  pintarSalidas();
+}
+
+function pintarSalidas() {
+  pintarSelectSiloSalida();
+  const pend = pendientePorCereal();
+  $('salPendiente').innerHTML = Object.keys(pend).length
+    ? 'Sin confirmar: ' + Object.keys(pend).map(c => `<b>${tnTxt(pend[c])} de ${nombreCereal(c).toLowerCase()}</b>`).join(' · ') + '. Se reparten en la próxima recorrida.'
+    : 'No hay salidas sin confirmar.';
+  const ult = salidasSilos.slice().reverse().slice(0, 40);
+  $('salTabla').innerHTML = ult.length ? `<div class="tabla-scroll"><table>
+    <thead><tr><th>Fecha</th><th>Cereal</th><th>Tn</th><th>Silo</th><th>Carta de porte</th><th>Notas</th><th class="solo-pantalla"></th></tr></thead>
+    <tbody>${ult.map(s => {
+      const asig = Object.keys(s.asignado).map(id => `${id}: ${tnTxt(s.asignado[id])}`).join(' · ');
+      const pk = kgPendientes(s);
+      const silo = s.silo ? s.silo : (asig ? asig : '') + (pk > 0.5 ? `${asig ? ' · ' : ''}<span class="alerta">sin confirmar ${tnTxt(pk)}</span>` : '');
+      return `<tr><td>${s.fecha.split('-').reverse().join('/')}</td><td>${nombreCereal(s.cereal)}</td><td>${num(s.kg / 1000, 2)}</td>
+        <td class="izq">${silo}</td><td>${s.carta.replace(/</g, '&lt;') || '—'}</td><td class="izq">${s.notas.replace(/</g, '&lt;')}</td>
+        <td class="solo-pantalla"><button class="mini" data-borrar-sal="${s.ID}">Borrar</button></td></tr>`;
+    }).join('')}</tbody></table></div>` : '<p class="vacio">Todavía no hay salidas registradas.</p>';
+  $('salTabla').querySelectorAll('[data-borrar-sal]').forEach(b => b.onclick = () => borrarSalida(b.dataset.borrarSal));
+
+  pintarFormRecorrida();
+  const ultR = recorridas.slice(0, 60);
+  $('recHistorial').innerHTML = ultR.length ? `<div class="tabla-scroll"><table>
+    <thead><tr><th>Fecha</th><th>Silo</th><th>Cereal</th><th>Según app (tn)</th><th>Real (tn)</th><th>Salidas sin confirmar asignadas (tn)</th><th>Diferencia (tn)</th><th>Notas</th></tr></thead>
+    <tbody>${ultR.map(r => {
+      const dif = Number(r.Diferencia) || 0;
+      return `<tr><td>${String(r.Fecha).slice(0, 10).split('-').reverse().join('/')}</td><td>${r.SiloID}</td><td>${r.Cereal || ''}</td>
+        <td>${num(Number(r.TnApp) || 0, 1)}</td><td>${num(Number(r.TnReales) || 0, 1)}</td><td>${num(Number(r.TnSinConfirmar) || 0, 1)}</td>
+        <td>${Math.abs(dif) < 0.05 ? '0' : `<span class="alerta">${dif > 0 ? 'faltan ' : 'sobran '}${num(Math.abs(dif), 1)}</span>`}</td>
+        <td class="izq">${String(r.Notas || '').replace(/</g, '&lt;')}</td></tr>`;
+    }).join('')}</tbody></table></div>` : '<p class="vacio">Todavía no hay recorridas.</p>';
+}
+
+async function abrirSalidas() {
+  document.getElementById('modalSalidas').classList.add('abierto');
+  $('salFecha').value = hoyLocal(); $('recFecha').value = hoyLocal();
+  estadoSal(''); estadoRec('');
+  if (planta !== 'monaco') { $('salTabla').innerHTML = '<p class="vacio">Las salidas y recorridas se llevan en la planta Mónaco.</p>'; return; }
+  $('salTabla').innerHTML = '<p class="vacio">Cargando…</p>';
+  const remoto = await fetchSheet();
+  if (remoto) cargarSalidasRecorridas(remoto);
+  pintarSalidas();
+}
+
+$('salCereal').addEventListener('change', pintarSelectSiloSalida);
+['salKg', 'salSilo'].forEach(id => { $(id).addEventListener('input', pintarPreviewSalida); $(id).addEventListener('change', pintarPreviewSalida); });
+$('salGuardar').onclick = guardarSalida;
+$('recGuardar').onclick = guardarRecorrida;
+$('opSalidas').onclick = abrirSalidas;
+$('salCerrar').onclick = () => document.getElementById('modalSalidas').classList.remove('abierto');
+$('salImprimir').onclick = () => window.print();
+
 /* jornada guionada */
 const GUION = [
   { t: 300,  f: () => { reloj = 7 * 60 + 30; anotar('Arranca la jornada'); pintarTodo(); } },
@@ -3004,6 +3400,7 @@ function animar() {
   cargarParamsGas();
   cargarLecturasGas(cubicajeRemoto);
   cargarFacturasGas(cubicajeRemoto);
+  cargarSalidasRecorridas(cubicajeRemoto);
   aplicarDatosSilosRemoto();
   cargarPlanta('monaco');
   pintarPaso();
