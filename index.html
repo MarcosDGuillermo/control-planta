@@ -369,7 +369,7 @@
       <button class="mini" id="pasDescargar">Descargar CSV</button>
     </div>
     <div id="pasTabla"></div>
-    <p class="pie" id="pasPie">Fecha, cereal, silo previo, sentido de conteo, chapas, humedad de entrada y salida, número de pasada, silo destino, toneladas y si quedó disponible para cargar a puerto (humedad de salida ≤ tolerancia del cereal: maíz 14,5, soja 13,5, trigo y cebada 14, girasol 11). "Costo pasada" reparte el costo total del mes (de "Consumo de gas") entre todas las pasadas de ese mes, proporcional a cuántas toneladas pesó cada una.</p>
+    <p class="pie" id="pasPie">Fecha, cereal, silo previo, sentido de conteo, chapas, humedad de entrada y salida, número de pasada, silo destino, toneladas y si quedó disponible para cargar a puerto (humedad de salida ≤ tolerancia del cereal: maíz 14,5, soja 13,5, trigo y cebada 14, girasol 11). "Costo pasada" reparte el costo del gas consumido en el mes (relojes × precio de las facturas, en "Consumo de gas") entre todas las pasadas de ese mes, proporcional a cuántas toneladas pesó cada una.</p>
     <div class="mandos">
       <button class="imprimir" id="pasImprimir">Imprimir</button>
       <button class="cerrar" id="pasCerrar">Cerrar</button>
@@ -454,29 +454,40 @@
     <h3 class="gas-h">Consumo por mes</h3>
     <div id="gasTabla"></div>
 
+    <h3 class="gas-h">Facturas de YPF Gas</h3>
+    <p class="sub solo-pantalla" style="margin:0 0 4px;">YPF factura lo que descarga en los tubos. Cargá cada factura junto con la carga del camión que le corresponde: el precio por kg sale de ahí, y el costo del gas se calcula con lo que bajan los relojes.</p>
+    <div class="gas-form solo-pantalla">
+      <label>Carga del camión
+        <select id="facCarga" style="min-width:220px;"></select>
+      </label>
+      <label>N° de remito
+        <input type="text" id="facRemito" style="width:140px;" placeholder="0890-00021729">
+      </label>
+      <label>N° de factura
+        <input type="text" id="facNumero" style="width:140px;">
+      </label>
+      <label>Fecha de factura
+        <input type="date" id="facFecha">
+      </label>
+      <label>Kg facturados
+        <input type="number" id="facKg" min="0" step="1" inputmode="decimal" style="width:100px;">
+      </label>
+      <label>Importe neto, sin IVA ($)
+        <input type="number" id="facImporte" min="0" step="0.01" inputmode="decimal" style="width:130px;">
+      </label>
+      <label>Notas
+        <input type="text" id="facNotas" style="width:140px;">
+      </label>
+      <button class="fuerte" id="facGuardar">Guardar factura</button>
+    </div>
+    <p class="gas-preview" id="facPreview"></p>
+    <p class="gas-estado" id="facEstado"></p>
+    <div id="gasFacturas"></div>
+
     <h3 class="gas-h">Lecturas cargadas</h3>
     <div id="gasLecturas"></div>
 
-    <p class="pie">Los kg salen de: puntos de % × litros del tubo × densidad del propano. El reloj tiene un error de 1 o 2 puntos, así que conviene mirar el mes y no una lectura suelta. "Balance con remitos" es lo que había en los tubos al empezar, más los kg de los remitos, menos lo que quedó al final: si se aleja mucho de "Relojes", hay un reloj mal leído o una carga sin anotar. Las toneladas listas son las de las pasadas con humedad de salida dentro de la tolerancia.</p>
-
-    <details class="gas-detalle">
-      <summary>Datos de factura de un mes</summary>
-      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:12px 0 4px;">
-        <label style="font-size:11px;color:var(--tenue);display:flex;flex-direction:column;gap:2px;">Mes
-          <input type="month" id="gasMes" style="padding:5px 7px;border:1px solid var(--linea);font:inherit;">
-        </label>
-        <label style="font-size:11px;color:var(--tenue);display:flex;flex-direction:column;gap:2px;">Consumo
-          <input type="number" step="0.01" id="gasConsumo" placeholder="m³ o litros" style="padding:5px 7px;border:1px solid var(--linea);font:inherit;width:120px;">
-        </label>
-        <label style="font-size:11px;color:var(--tenue);display:flex;flex-direction:column;gap:2px;">Tarifa ($/m³ o $/litro)
-          <input type="number" step="0.01" id="gasTarifa" style="padding:5px 7px;border:1px solid var(--linea);font:inherit;width:120px;">
-        </label>
-        <label style="font-size:11px;color:var(--tenue);display:flex;flex-direction:column;gap:2px;">Notas
-          <input type="text" id="gasNotas" style="padding:5px 7px;border:1px solid var(--linea);font:inherit;width:160px;">
-        </label>
-        <button class="mini" id="gasGuardar">+ Agregar mes nuevo</button>
-      </div>
-    </details>
+    <p class="pie">El costo del gas consumido se calcula con el precio promedio del gas que hay en los tubos: cada carga se mezcla con lo que había, a su precio de factura (importe neto ÷ kg facturados). El gas que ya estaba antes de la primera carga registrada se valoriza al precio de esa primera factura. Un costo marcado con * es provisorio: hay una carga sin factura y se usó el último precio conocido. Los kg salen de: puntos de % × litros del tubo × densidad del propano. El reloj tiene un error de 1 o 2 puntos, así que conviene mirar el mes y no una lectura suelta. "Balance con remitos" es lo que había en los tubos al empezar, más los kg de los remitos, menos lo que quedó al final: si se aleja mucho de "Relojes", hay un reloj mal leído o una carga sin anotar. Las toneladas listas son las de las pasadas con humedad de salida dentro de la tolerancia.</p>
 
     <details class="gas-detalle">
       <summary>Tubos y densidad</summary>
@@ -1951,14 +1962,11 @@ addEventListener('keydown', e => {
 let pasadasCache = [];
 let gasCache = [];
 
-/* costo total ($) de cada mes, a partir de ConsumoGas */
+/* costo ($) del gas consumido en cada mes: lecturas de los relojes × precio promedio de las facturas */
 function costoPorMes() {
+  const c = costeoGas(lecturasGas, facturasGas);
   const mapa = {};
-  gasCache.forEach(g => {
-    const consumo = Number(g.Consumo_m3_o_litros) || 0;
-    const tarifa = Number(g.Tarifa) || 0;
-    if (consumo && tarifa) mapa[g.Mes] = consumo * tarifa;
-  });
+  if (c) Object.keys(c.meses).forEach(m => { if (c.meses[m].costo) mapa[m] = c.meses[m].costo; });
   return mapa;
 }
 
@@ -1979,6 +1987,7 @@ async function abrirPasadas() {
   const remoto = await fetchSheet();
   pasadasCache = (remoto && remoto.PasadasSecado) ? remoto.PasadasSecado : [];
   gasCache = (remoto && remoto.ConsumoGas) ? remoto.ConsumoGas : [];
+  if (remoto) { cargarLecturasGas(remoto); cargarFacturasGas(remoto); }
   $('pasSub').textContent = remoto
     ? `${pasadasCache.length} pasadas registradas en la Sheet`
     : 'Sin conexión con la Sheet — configurá WEBAPP_URL para ver el registro real';
@@ -2605,7 +2614,8 @@ function refrescarGas() {
   ponerPlaceholders();
   pintarPreview();
   pintarLecturas();
-  pintarGasTabla(gasCache, pasadasCache);
+  pintarFacturas();
+  pintarGasTabla(pasadasCache);
 }
 
 async function subirPendientes() {
@@ -2659,7 +2669,8 @@ async function abrirGas() {
   document.getElementById('modalGas').classList.add('abierto');
   $('lecFecha').value = hoyLocal();
   $('lecHora').value = horaLocal();
-  $('gasMes').value = hoyLocal().slice(0, 7);
+  $('facFecha').value = hoyLocal();
+  estadoFactura('');
   $('parDens').value = DENSIDAD_GAS;
   IDS_TUBO.forEach(id => { $('parL' + id.slice(1)).value = TUBOS_GAS[id].litros; });
   estadoGas('');
@@ -2667,6 +2678,7 @@ async function abrirGas() {
   const remoto = await fetchSheet();
   if (remoto) {
     cargarLecturasGas(remoto);
+    cargarFacturasGas(remoto);
     gasCache = remoto.ConsumoGas || [];
     pasadasCache = remoto.PasadasSecado || [];
   }
@@ -2674,135 +2686,215 @@ async function abrirGas() {
   refrescarGas();
 }
 
-function pintarGasTabla(gasFilas, pasadas) {
+/* ============================================================
+   FACTURAS DE YPF GAS y COSTO DEL GAS CONSUMIDO
+   YPF factura lo que descarga (kg del remito). El costo de lo consumido se calcula
+   con el precio promedio ponderado del gas que hay en los tubos.
+   ============================================================ */
+let facturasGas = [];
+
+function normFactura(r) {
+  return {
+    ID: String(r.ID || ''), fecha: String(r.Fecha || '').slice(0, 10),
+    nroFactura: r.NroFactura ? String(r.NroFactura) : '', nroRemito: r.NroRemito ? String(r.NroRemito) : '',
+    cargaID: String(r.CargaID || ''), kg: Number(r.Kg) || 0, importe: Number(r.ImporteNeto) || 0,
+    notas: r.Notas ? String(r.Notas) : ''
+  };
+}
+function cargarFacturasGas(remoto) {
+  facturasGas = ((remoto && remoto.FacturasGas) || []).map(normFactura).filter(f => f.ID)
+    .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.ID.localeCompare(b.ID));
+}
+const precioFactura = f => (f && f.kg > 0 && f.importe > 0) ? f.importe / f.kg : null;
+const cargasRegistradas = () => lecturasGas.filter(l => l.tipo === 'despues');
+const facturaDeCarga = id => facturasGas.find(f => f.cargaID === id);
+
+/* recorre las lecturas en orden: cada tramo de consumo se valoriza al precio promedio vigente,
+   y cada carga mezcla lo que había con lo cargado, a su precio de factura */
+function costeoGas(lects, facts) {
+  const porCarga = new Map();
+  facts.forEach(f => { if (precioFactura(f) !== null) porCarga.set(f.cargaID, f); });
+  let precio = null;
+  for (const l of lects) if (l.tipo === 'despues' && porCarga.has(l.ID)) { precio = precioFactura(porCarga.get(l.ID)); break; }
+  if (precio === null) return null;                      // sin ninguna factura no hay costo
+  const precioInicial = precio;
+  let provisorio = false;
+  const meses = {};
+  intervalosGas(lects).forEach(it => {
+    const mes = it.hasta.fh.slice(0, 7);
+    const m = meses[mes] || (meses[mes] = { costo: 0, kg: 0, provisorio: false });
+    if (it.kg > 0) { m.costo += it.kg * precio; m.kg += it.kg; if (provisorio) m.provisorio = true; }
+    if (it.carga && it.cargaRemitoKg > 0) {
+      const f = porCarga.get(it.hasta.ID);
+      const precioCarga = f ? precioFactura(f) : precio;   // sin factura: provisorio al último precio
+      if (!f) { provisorio = true; m.provisorio = true; }
+      const R = it.cargaRemitoKg;
+      const antes = it.desde.tipo === 'antes' ? stockKg(it.desde) : Math.max(0, stockKg(it.hasta) - R);
+      precio = (antes * precio + R * precioCarga) / (antes + R);
+    }
+  });
+  return { meses, precioActual: precio, precioInicial, provisorio };
+}
+
+/* ---- pantalla ---- */
+function estadoFactura(msg, mal) {
+  $('facEstado').textContent = msg;
+  $('facEstado').classList.toggle('mal', !!mal);
+}
+const plata = (n, d = 0) => '$' + num(n, d);
+
+function pintarSelectCargas() {
+  const sel = $('facCarga'), previo = sel.value;
+  const cargas = cargasRegistradas().slice().reverse();
+  if (!cargas.length) {
+    sel.innerHTML = '<option value="">Primero cargá la lectura "Después de la carga"</option>';
+    sel.disabled = true; $('facGuardar').disabled = true; return;
+  }
+  sel.disabled = false; $('facGuardar').disabled = false;
+  sel.innerHTML = cargas.map(c => {
+    const f = facturaDeCarga(c.ID);
+    return `<option value="${c.ID}">${fechaLegible(c.fh).slice(0, 8)} · remito ${num(c.remito)} kg${f ? ' · ya tiene factura' : ''}</option>`;
+  }).join('');
+  if (previo && cargas.some(c => c.ID === previo)) sel.value = previo;
+  else { const sinFactura = cargas.find(c => !facturaDeCarga(c.ID)); sel.value = (sinFactura || cargas[0]).ID; }
+  completarDesdeCarga();
+}
+
+function completarDesdeCarga() {
+  const c = lecturasGas.find(l => l.ID === $('facCarga').value);
+  if (!c) return;
+  const f = facturaDeCarga(c.ID);
+  $('facKg').value = f ? f.kg : c.remito;
+  $('facRemito').value = f ? f.nroRemito : '';
+  $('facNumero').value = f ? f.nroFactura : '';
+  $('facImporte').value = f ? f.importe : '';
+  $('facNotas').value = f ? f.notas : '';
+  if (f && f.fecha) $('facFecha').value = f.fecha;
+  pintarPreviewFactura();
+}
+
+function pintarPreviewFactura() {
+  const c = lecturasGas.find(l => l.ID === $('facCarga').value);
+  const kg = Number($('facKg').value) || 0, imp = Number($('facImporte').value) || 0;
+  let t = '';
+  if (kg > 0 && imp > 0) t += `Precio: ${plata(imp / kg, 2)} por kg. `;
+  if (c && kg > 0) {
+    const dif = kg - c.remito;
+    t += Math.abs(dif) < 0.5 ? `Coincide con el remito (${num(c.remito)} kg).`
+      : `No coincide con el remito: la factura tiene ${num(Math.abs(dif))} kg ${dif > 0 ? 'más' : 'menos'} que los ${num(c.remito)} kg del remito.`;
+  }
+  $('facPreview').textContent = t;
+  $('facPreview').style.color = (c && kg > 0 && Math.abs(kg - c.remito) >= 0.5) ? 'var(--alerta)' : '';
+}
+
+function pintarFacturas() {
+  pintarSelectCargas();
+  if (!facturasGas.length) {
+    $('gasFacturas').innerHTML = '<p class="vacio">Todavía no hay facturas. Sin factura no se puede calcular el costo del gas.</p>';
+    return;
+  }
+  $('gasFacturas').innerHTML = `<div class="tabla-scroll"><table>
+    <thead><tr><th>Fecha</th><th>N° factura</th><th>N° remito</th><th>Carga</th><th>Kg factura</th><th>Kg remito</th><th>Control</th><th>Importe neto</th><th>$ por kg</th><th class="solo-pantalla"></th></tr></thead>
+    <tbody>${facturasGas.slice().reverse().map(f => {
+      const c = lecturasGas.find(l => l.ID === f.cargaID);
+      const dif = c ? f.kg - c.remito : null;
+      const ctrl = !c ? '<span class="alerta">Carga no encontrada</span>'
+        : Math.abs(dif) < 0.5 ? 'Coincide' : `<span class="alerta">${dif > 0 ? '+' : '−'}${num(Math.abs(dif))} kg</span>`;
+      const pr = precioFactura(f);
+      return `<tr>
+        <td>${f.fecha ? f.fecha.split('-').reverse().join('/') : '—'}</td>
+        <td>${f.nroFactura.replace(/</g, '&lt;') || '—'}</td>
+        <td class="izq">${f.nroRemito.replace(/</g, '&lt;') || '—'}</td>
+        <td>${c ? fechaLegible(c.fh).slice(0, 8) : '—'}</td>
+        <td>${num(f.kg)}</td><td>${c ? num(c.remito) : '—'}</td>
+        <td class="izq">${ctrl}</td>
+        <td>${plata(f.importe, 2)}</td><td><b>${pr !== null ? plata(pr, 2) : '—'}</b></td>
+        <td class="solo-pantalla"><button class="mini" data-borrar-fac="${f.ID}">Borrar</button></td>
+      </tr>`;
+    }).join('')}</tbody></table></div>`;
+  $('gasFacturas').querySelectorAll('[data-borrar-fac]').forEach(b => b.onclick = () => borrarFactura(b.dataset.borrarFac));
+}
+
+async function guardarFactura() {
+  const c = lecturasGas.find(l => l.ID === $('facCarga').value);
+  const kg = Number($('facKg').value) || 0, imp = Number($('facImporte').value) || 0;
+  if (!c) { estadoFactura('Elegí a qué carga del camión corresponde la factura.', true); return; }
+  if (!(kg > 0) || !(imp > 0)) { estadoFactura('Faltan los kg facturados o el importe neto.', true); return; }
+  if (Math.abs(kg - c.remito) >= 0.5 &&
+      !confirm(`La factura dice ${num(kg)} kg y el remito ${num(c.remito)} kg. ¿Guardarla igual?`)) return;
+  const previa = facturaDeCarga(c.ID);
+  const f = {
+    ID: previa ? previa.ID : 'F' + Date.now(), fecha: $('facFecha').value || hoyLocal(),
+    nroFactura: $('facNumero').value.trim(), nroRemito: $('facRemito').value.trim(),
+    cargaID: c.ID, kg, importe: imp, notas: $('facNotas').value.trim()
+  };
+  $('facGuardar').disabled = true;
+  const res = await postSheet('FacturasGas', 'upsert', {
+    ID: f.ID, Fecha: f.fecha, NroFactura: f.nroFactura, NroRemito: f.nroRemito,
+    CargaID: f.cargaID, Kg: f.kg, ImporteNeto: f.importe, Notas: f.notas
+  }, 'ID');
+  $('facGuardar').disabled = false;
+  if (!subidaOk(res)) {
+    estadoFactura('No se pudo guardar en la pestaña FacturasGas de la Sheet' + (res && res.error ? ` (${res.error})` : '') + '. Revisá la conexión y que la pestaña exista.', true);
+    return;
+  }
+  facturasGas = facturasGas.filter(x => x.ID !== f.ID).concat(f).sort((a, b) => a.fecha.localeCompare(b.fecha) || a.ID.localeCompare(b.ID));
+  estadoFactura(previa ? 'Factura actualizada.' : 'Factura guardada.');
+  anotar(`Factura de gas ${f.nroFactura || ''} guardada: ${num(f.kg)} kg a ${plata(f.importe / f.kg, 2)}/kg`);
+  refrescarGas();
+}
+
+async function borrarFactura(id) {
+  const f = facturasGas.find(x => x.ID === id);
+  if (!f || !confirm(`¿Borrar la factura ${f.nroFactura || ''} de ${num(f.kg)} kg?`)) return;
+  const res = await postSheet('FacturasGas', 'delete', { ID: id }, 'ID');
+  if (!subidaOk(res)) { estadoFactura('No se pudo borrar de la Sheet. Probá de nuevo.', true); return; }
+  facturasGas = facturasGas.filter(x => x.ID !== id);
+  estadoFactura('Factura borrada.');
+  refrescarGas();
+}
+
+function pintarGasTabla(pasadas) {
   const listasPorMes = tnListasPorMes(pasadas);
   const puntosPorMes = tnPuntosPorMes(pasadas);
   const relojes = resumenPorMes(lecturasGas);
-  const meses = [...new Set([...gasFilas.map(g => g.Mes), ...Object.keys(listasPorMes), ...Object.keys(relojes)])].filter(Boolean).sort().reverse();
-
+  const costeo = costeoGas(lecturasGas, facturasGas);
+  const meses = [...new Set([...Object.keys(listasPorMes), ...Object.keys(relojes)])].filter(Boolean).sort().reverse();
   if (!meses.length) {
     $('gasTabla').innerHTML = '<p class="vacio">Todavía no hay datos. Cargá una lectura de los relojes.</p>';
     return;
   }
-
-  $('gasTabla').innerHTML = `<div class="tabla-scroll">
-    <table>
-      <thead><tr><th>Mes</th><th>Relojes (kg)</th><th>Balance con remitos (kg)</th><th>Tn listas para puerto</th><th>Kg gas / tn</th><th>Kg gas / tn·punto</th><th>Consumo factura</th><th>Tarifa ($)</th><th>Costo ($)</th><th>Costo / tn ($)</th><th>Notas</th><th></th><th></th></tr></thead>
-      <tbody>
-        ${meses.map(mes => {
-          const fila = gasFilas.find(g => g.Mes === mes);
-          const consumo = fila ? Number(fila.Consumo_m3_o_litros) : '';
-          const tarifa = fila ? Number(fila.Tarifa) : '';
-          const notas = fila ? (fila.Notas || '') : '';
-          const listo = listasPorMes[mes] || 0;
-          const r = relojes[mes];
-          const relojKg = r && r.intervalos ? r.relojKg : null;
-          const balance = r && r.balanceKg !== null ? r.balanceKg : null;
-          const kgTn = (relojKg && listo) ? num(relojKg / listo, 2) : '—';
-          const kgTnPunto = (relojKg && puntosPorMes[mes]) ? num(relojKg / puntosPorMes[mes], 2) : '—';
-          const costo = (consumo && tarifa) ? consumo * tarifa : 0;
-          const costoTn = (costo && listo) ? (costo / listo).toFixed(2) : '—';
-          return `
-            <tr data-mes="${mes}" data-listo="${listo}">
-              <td>${mes}</td>
-              <td style="text-align:right;">${relojKg !== null ? '<b>' + num(relojKg) + '</b>' : '—'}${r && r.avisos ? ' <span class="alerta" title="Hay tramos con avisos: mirá la tabla de lecturas">⚠</span>' : ''}</td>
-              <td style="text-align:right;">${balance !== null ? num(balance) : '—'}</td>
-              <td>${num(listo, 2)} tn</td>
-              <td><b>${kgTn}</b></td>
-              <td>${kgTnPunto}</td>
-              <td><input type="number" step="0.01" value="${consumo}" data-role="consumo" style="width:90px;padding:4px 6px;border:1px solid var(--linea);font:inherit;"></td>
-              <td><input type="number" step="0.01" value="${tarifa}" data-role="tarifa" style="width:90px;padding:4px 6px;border:1px solid var(--linea);font:inherit;"></td>
-              <td data-role="costo">${costo ? '$' + num(costo, 2) : '—'}</td>
-              <td data-role="costoTn">${costoTn === '—' ? '—' : '$' + costoTn}</td>
-              <td class="izq"><input type="text" value="${String(notas).replace(/"/g, '&quot;')}" data-role="notas" style="width:120px;padding:4px 6px;border:1px solid var(--linea);font:inherit;"></td>
-              <td><button class="mini" data-role="guardarGasFila">Guardar cambios</button></td>
-              <td><button class="mini" data-role="borrarGasFila">Borrar</button></td>
-            </tr>`;
-        }).join('')}
-      </tbody>
-    </table></div>`;
-  $('gasTabla').querySelectorAll('tr[data-mes]').forEach(tr => {
-    const recalc = () => {
-      const listo = Number(tr.dataset.listo) || 0;
-      const consumo = Number(tr.querySelector('[data-role="consumo"]').value) || 0;
-      const tarifa = Number(tr.querySelector('[data-role="tarifa"]').value) || 0;
-      const costo = consumo * tarifa;
-      const costoTn = (costo && listo) ? (costo / listo).toFixed(2) : '—';
-      tr.querySelector('[data-role="costo"]').textContent = costo ? '$' + num(costo, 2) : '—';
-      tr.querySelector('[data-role="costoTn"]').textContent = costoTn === '—' ? '—' : '$' + costoTn;
-    };
-    tr.querySelector('[data-role="consumo"]').addEventListener('input', recalc);
-    tr.querySelector('[data-role="tarifa"]').addEventListener('input', recalc);
-  });
-
-  $('gasTabla').querySelectorAll('[data-role="guardarGasFila"]').forEach(btn => {
-    btn.onclick = async () => {
-      const tr = btn.closest('tr');
-      const mes = tr.dataset.mes;
-      const consumo = Number(tr.querySelector('[data-role="consumo"]').value) || 0;
-      const tarifa = Number(tr.querySelector('[data-role="tarifa"]').value) || 0;
-      const notas = tr.querySelector('[data-role="notas"]').value;
-      await postSheet('ConsumoGas', 'upsert', { Mes: mes, Consumo_m3_o_litros: consumo, Tarifa: tarifa, Notas: notas }, 'Mes');
-      anotar(`Consumo de gas de ${mes} actualizado`);
-      const remoto = await fetchSheet();
-      if (remoto) { gasCache = remoto.ConsumoGas || []; pasadasCache = remoto.PasadasSecado || []; }
-      pintarGasTabla(gasCache, pasadasCache);
-    };
-  });
-
-  $('gasTabla').querySelectorAll('[data-role="borrarGasFila"]').forEach(btn => {
-    btn.onclick = async () => {
-      const tr = btn.closest('tr');
-      const mes = tr.dataset.mes;
-      if (!confirm(`¿Borrar los datos de factura de ${mes}?`)) return;
-      const res = await postSheet('ConsumoGas', 'delete', { Mes: mes }, 'Mes');
-      if (res && res.ok) {
-        anotar(`Datos de factura de ${mes} borrados`);
-      } else {
-        anotar('No se pudo borrar (puede que ya se haya borrado)');
-      }
-      const remoto = await fetchSheet();
-      if (remoto) { gasCache = remoto.ConsumoGas || []; pasadasCache = remoto.PasadasSecado || []; }
-      pintarGasTabla(gasCache, pasadasCache);
-    };
-  });
+  const hayProvisorio = costeo && Object.values(costeo.meses).some(m => m.provisorio);
+  $('gasTabla').innerHTML = `<div class="tabla-scroll"><table>
+    <thead><tr><th>Mes</th><th>Consumo relojes (kg)</th><th>Balance con remitos (kg)</th><th>Costo del gas ($)</th><th>Tn listas para puerto</th><th>Kg gas / tn</th><th>Kg gas / tn·punto</th><th>Costo / tn lista ($)</th></tr></thead>
+    <tbody>${meses.map(mes => {
+      const r = relojes[mes];
+      const kg = r && r.intervalos ? r.relojKg : null;
+      const balance = r && r.balanceKg !== null && r.balanceKg !== undefined ? r.balanceKg : null;
+      const listo = listasPorMes[mes] || 0;
+      const cm = costeo && costeo.meses[mes];
+      const costo = cm && cm.costo ? cm.costo : null;
+      const marca = cm && cm.provisorio ? ' *' : '';
+      return `<tr>
+        <td>${mes}</td>
+        <td>${kg !== null ? '<b>' + num(kg) + '</b>' : '—'}${r && r.avisos ? ' <span class="alerta" title="Hay tramos con avisos: mirá la tabla de lecturas">⚠</span>' : ''}</td>
+        <td>${balance !== null ? num(balance) : '—'}</td>
+        <td>${costo !== null ? plata(costo) + marca : '—'}</td>
+        <td>${num(listo, 2)} tn</td>
+        <td><b>${kg && listo ? num(kg / listo, 2) : '—'}</b></td>
+        <td>${kg && puntosPorMes[mes] ? num(kg / puntosPorMes[mes], 2) : '—'}</td>
+        <td><b>${costo !== null && listo ? plata(costo / listo, 2) + marca : '—'}</b></td>
+      </tr>`;
+    }).join('')}</tbody></table></div>
+    <p class="nota">${costeo
+      ? `Precio promedio del gas que hay hoy en los tubos: <b>${plata(costeo.precioActual, 2)} por kg</b>.${hayProvisorio ? ' * Provisorio: falta la factura de alguna carga.' : ''}`
+      : 'Para ver costos, cargá la factura de al menos una carga del camión.'}</p>`;
 }
 
-/* eventos de la pantalla de gas */
-['lecFecha', 'lecHora', 'lecTipo', 'lecT1', 'lecT2', 'lecT3', 'lecRemito'].forEach(id => {
-  $(id).addEventListener('input', pintarPreview);
-  $(id).addEventListener('change', () => { toggleRemito(); pintarPreview(); });
-});
-$('lecGuardar').onclick = guardarLectura;
-$('parGuardar').onclick = () => {
-  const dens = parseFloat($('parDens').value);
-  const litros = {};
-  IDS_TUBO.forEach(id => { litros[id] = parseFloat($('parL' + id.slice(1)).value); });
-  if (!(dens > 0.4 && dens < 0.65) || IDS_TUBO.some(id => !(litros[id] > 0))) {
-    estadoGas('Revisá los valores: la densidad del propano líquido ronda 0,51 kg/L y los litros tienen que ser mayores a cero.', true);
-    return;
-  }
-  DENSIDAD_GAS = dens;
-  IDS_TUBO.forEach(id => { TUBOS_GAS[id].litros = litros[id]; });
-  lsGuardar(LS_PARAMS, { dens, litros });
-  estadoGas('Parámetros guardados en este equipo.');
-  refrescarGas();
-};
-
-$('gasGuardar').onclick = async () => {
-  const mes = $('gasMes').value;
-  const consumo = Number($('gasConsumo').value);
-  const tarifa = Number($('gasTarifa').value) || 0;
-  const notas = $('gasNotas').value;
-  if (!mes || !consumo) { anotar('Falta el mes o el consumo de gas'); return; }
-  await postSheet('ConsumoGas', 'upsert', { Mes: mes, Consumo_m3_o_litros: consumo, Tarifa: tarifa, Notas: notas }, 'Mes');
-  $('gasConsumo').value = '';
-  $('gasTarifa').value = '';
-  $('gasNotas').value = '';
-  anotar(`Consumo de gas de ${mes} guardado`);
-  const remoto = await fetchSheet();
-  pintarGasTabla((remoto && remoto.ConsumoGas) || [], (remoto && remoto.PasadasSecado) || []);
-};
+/* eventos de facturas */
+$('facCarga').addEventListener('change', completarDesdeCarga);
+['facKg', 'facImporte'].forEach(id => $(id).addEventListener('input', pintarPreviewFactura));
+$('facGuardar').onclick = guardarFactura;
 
 /* jornada guionada */
 const GUION = [
@@ -2870,6 +2962,7 @@ function animar() {
   gasCache = (cubicajeRemoto && cubicajeRemoto.ConsumoGas) || [];
   cargarParamsGas();
   cargarLecturasGas(cubicajeRemoto);
+  cargarFacturasGas(cubicajeRemoto);
   aplicarDatosSilosRemoto();
   cargarPlanta('monaco');
   pintarPaso();
