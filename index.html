@@ -276,10 +276,17 @@
         <input id="humSalida" type="number" step="0.1" value="15.6" style="width:64px;padding:4px 6px;border:1px solid var(--linea);font:inherit;">
       </label>
     </div>
-    <div class="plantas" style="margin-top:4px;">
-      <button id="sentAriba" aria-pressed="true">Copete arriba (recién cargado)</button>
+    <div class="rot" style="margin-top:4px;">Al empezar</div>
+    <div class="plantas">
+      <button id="sentAriba" aria-pressed="true">Copete arriba</button>
       <button id="sentEnrasado" aria-pressed="false">Enrasado</button>
-      <button id="sentAbajo" aria-pressed="false">Copete abajo (vaciándose)</button>
+      <button id="sentAbajo" aria-pressed="false">Copete abajo</button>
+    </div>
+    <div class="rot" style="margin-top:4px;">Al terminar</div>
+    <div class="plantas">
+      <button id="finArriba" aria-pressed="false">Copete arriba</button>
+      <button id="finEnrasado" aria-pressed="false">Enrasado</button>
+      <button id="finAbajo" aria-pressed="true">Copete abajo</button>
     </div>
     <div class="plantas" style="margin-top:4px;">
       <button id="pasada1" aria-pressed="true">1° pasada</button>
@@ -369,7 +376,7 @@
       <button class="mini" id="pasDescargar">Descargar CSV</button>
     </div>
     <div id="pasTabla"></div>
-    <p class="pie" id="pasPie">Fecha, cereal, silo previo, sentido de conteo, chapas, humedad de entrada y salida, número de pasada, silo destino, toneladas y si quedó disponible para cargar a puerto (humedad de salida ≤ tolerancia del cereal: maíz 14,5, soja 13,5, trigo y cebada 14, girasol 11). "Costo pasada" reparte el costo del gas consumido en el mes (relojes × precio de las facturas, en "Consumo de gas") entre todas las pasadas de ese mes, proporcional a cuántas toneladas pesó cada una.</p>
+    <p class="pie" id="pasPie">Fecha, cereal, silo previo, sentido de conteo, chapas, humedad de entrada y salida, número de pasada, silo destino, toneladas y si quedó disponible para cargar a puerto (humedad de salida ≤ tolerancia del cereal: maíz 14,5, soja 13,5, trigo y cebada 14, girasol 11). "Costo pasada" reparte el costo en dólares del gas consumido en el mes (relojes × precio de las facturas, en "Consumo de gas") entre todas las pasadas de ese mes, proporcional a cuántas toneladas pesó cada una.</p>
     <div class="mandos">
       <button class="imprimir" id="pasImprimir">Imprimir</button>
       <button class="cerrar" id="pasCerrar">Cerrar</button>
@@ -475,6 +482,9 @@
       <label>Importe neto, sin IVA ($)
         <input type="number" id="facImporte" min="0" step="0.01" inputmode="decimal" style="width:130px;">
       </label>
+      <label>Tipo de cambio ($ por US$)
+        <input type="number" id="facTC" min="0" step="0.01" inputmode="decimal" style="width:110px;">
+      </label>
       <label>Notas
         <input type="text" id="facNotas" style="width:140px;">
       </label>
@@ -487,7 +497,7 @@
     <h3 class="gas-h">Lecturas cargadas</h3>
     <div id="gasLecturas"></div>
 
-    <p class="pie">El costo del gas consumido se calcula con el precio promedio del gas que hay en los tubos: cada carga se mezcla con lo que había, a su precio de factura (importe neto ÷ kg facturados). El gas que ya estaba antes de la primera carga registrada se valoriza al precio de esa primera factura. Un costo marcado con * es provisorio: hay una carga sin factura y se usó el último precio conocido. Los kg salen de: puntos de % × litros del tubo × densidad del propano. El reloj tiene un error de 1 o 2 puntos, así que conviene mirar el mes y no una lectura suelta. "Balance con remitos" es lo que había en los tubos al empezar, más los kg de los remitos, menos lo que quedó al final: si se aleja mucho de "Relojes", hay un reloj mal leído o una carga sin anotar. Las toneladas listas son las de las pasadas con humedad de salida dentro de la tolerancia.</p>
+    <p class="pie">Los costos se muestran en dólares: cada factura se pasa a US$ con el tipo de cambio que cargues en ella, y en pesos para controlar contra las facturas. El costo del gas consumido se calcula con el precio promedio del gas que hay en los tubos: cada carga se mezcla con lo que había, a su precio de factura (importe neto ÷ kg facturados). El gas que ya estaba antes de la primera carga registrada se valoriza al precio de esa primera factura. Un costo marcado con * es provisorio: hay una carga sin factura y se usó el último precio conocido. Los kg salen de: puntos de % × litros del tubo × densidad del propano. El reloj tiene un error de 1 o 2 puntos, así que conviene mirar el mes y no una lectura suelta. "Balance con remitos" es lo que había en los tubos al empezar, más los kg de los remitos, menos lo que quedó al final: si se aleja mucho de "Relojes", hay un reloj mal leído o una carga sin anotar. Las toneladas listas son las de las pasadas con humedad de salida dentro de la tolerancia.</p>
 
     <details class="gas-detalle">
       <summary>Tubos y densidad</summary>
@@ -590,6 +600,8 @@ function derivarFamilia(f) {
   f.m3PorChapa = f.m3Cilindro / f.chapas;
   f.densidadNominal = f.tn / f.m3;      /* a cuánto está calculada la capacidad de chapa */
   f.m3Copete = f.conoSup;
+  /* pozo de extracción (cono para abajo): se toma el cono inferior; el silo de fondo plano no tiene, usa el superior */
+  f.m3Pozo = f.conoInf > 0 ? f.conoInf : f.conoSup;
   f.altoCopete = f.altoConoSup;
   f.taludCopete = Math.atan(f.altoCopete / (f.diam / 2)) * 180 / Math.PI;
   /* solo para el dibujo: techoVisual achica el cono de arriba (el silo 9 lo tiene más bajo de lo normal).
@@ -602,7 +614,8 @@ Object.values(FAMILIAS).forEach(derivarFamilia);
 /* volumen ocupado: cono de fondo + chapas + el copete de arriba, si lo hay */
 function volumenSilo(f, d) {
   if (d.chapas <= 0) return 0;
-  const vol = f.conoInf + (d.chapas / f.chapas) * f.m3Cilindro + (d.copete || 0) * f.m3Copete;
+  const cop = d.copete || 0;
+  const vol = f.conoInf + (d.chapas / f.chapas) * f.m3Cilindro + (cop > 0 ? cop * f.m3Copete : cop * (f.m3Pozo !== undefined ? f.m3Pozo : f.m3Copete));
   return Math.max(vol, 0);
 }
 
@@ -1396,12 +1409,14 @@ function tnPasada(fam, chapas, cereal, sentido) {
 /* toneladas reales de sacarle "chapasDelta" chapas a un silo: compara su cubicaje real
    (el mismo volumenSilo del módulo de Cubicaje, que sí toma cono Y copete) antes y después.
    Así el copete solo se cuenta una vez, y se le acredita a la pasada que efectivamente lo saca. */
-function estimarTn(it, chapasDelta, cerealElegido) {
+function estimarTn(it, chapasDelta, cerealElegido, copeteFinal) {
   if (!it) return 0;
   const cereal = cerealElegido || it.dato.cereal;
   const antes = volumenSilo(it.fam, it.dato);
   const despuesChapas = Math.max(0, it.dato.chapas - chapasDelta);
-  const despues = volumenSilo(it.fam, { chapas: despuesChapas, copete: it.dato.copete });
+  /* la forma de arriba cambia al vaciar: si no se indica cómo terminó, se supone que quedó igual */
+  const fin = copeteFinal === undefined || copeteFinal === null ? it.dato.copete : copeteFinal;
+  const despues = volumenSilo(it.fam, { chapas: despuesChapas, copete: fin });
   return Math.max(0, antes - despues) * (DENSIDAD[cereal] || 0.7);
 }
 
@@ -1433,7 +1448,7 @@ function opIngreso(chapas, cereal = 'maiz') {
 }
 
 /* sale hacia la secadora y va al silo de enfriado según el cereal */
-function opSecar(chapas, humEntrada = 18.2, humSalida = 15.6, sentido = 'arriba', pasada = 1, fecha = null, cerealElegido = null) {
+function opSecar(chapas, humEntrada = 18.2, humSalida = 15.6, sentido = 'arriba', pasada = 1, fecha = null, cerealElegido = null, copeteFinal = null) {
   const org = porId(datos.circuito.previo);
   const d = org.dato;
   chapas = Math.min(chapas, d.chapas);
@@ -1448,13 +1463,14 @@ function opSecar(chapas, humEntrada = 18.2, humSalida = 15.6, sentido = 'arriba'
 
   // tn de la pasada: compara el cubicaje real del previo antes/después de sacarle "chapas"
   // (misma fórmula que Cubicaje, toma cono y copete si corresponde) — se calcula ANTES de mutar el silo
-  const tn = estimarTn(org, chapas, cereal);
+  const tn = estimarTn(org, chapas, cereal, copeteFinal);
   const tnPrimera = tn * (chNuevo / chapas); // reparto proporcional entre lo nuevo y lo de repaso
 
   d.mezcla.repaso -= chRepaso;
   d.mezcla.nuevo  -= chNuevo;
   d.chapas -= chapas;
-  if (d.chapas < 0.01) { d.chapas = 0; d.mezcla.repaso = 0; d.mezcla.nuevo = 0; }
+  if (copeteFinal !== null && copeteFinal !== undefined) d.copete = copeteFinal;
+  if (d.chapas < 0.01) { d.chapas = 0; d.copete = 0; d.mezcla.repaso = 0; d.mezcla.nuevo = 0; }
 
   const idDestino = d.cereal === 'soja' ? datos.circuito.soja : datos.circuito.maiz;
   const destino = porId(idDestino);
@@ -1576,7 +1592,7 @@ function pintarPanel() {
         </div>
         <p class="aviso">Adentro está mezclado: lo que salga arrastra esa misma proporción.</p>` : ''}
       ${f.chapaM && !mez && !f.aOjo && !f.chapasPendientes ? `<p class="nota">La capacidad de planilla está calculada a ${num(f.densidadNominal, 2)} t/m³ con el techo lleno. Lo cargado sale del volumen por la densidad del cereal.</p>` : ''}
-      ${d.copete && !f.aOjo ? `<p class="nota">El copete toma el cono superior de la planilla: ${num(f.m3Copete, 2)} m³, un talud de ${num(f.taludCopete, 0)}°.</p>` : ''}
+      ${d.copete === 1 && !f.aOjo ? `<p class="nota">El copete toma el cono superior de la planilla: ${num(f.m3Copete, 2)} m³, un talud de ${num(f.taludCopete, 0)}°.</p>` : ''}${d.copete === -1 && !f.aOjo ? `<p class="nota">El embudo resta el cono inferior de la planilla: ${num(f.m3Pozo, 2)} m³. Es aproximado: depende de cómo se deslice el cereal.</p>` : ''}
       ${f.fondoPlano ? '<p class="aviso">Sin cono inferior: hay que barrer, el calculado se aparta del real cuando queda poco.</p>' : ''}
       ${f.estimado ? '<p class="aviso">Capacidad de planta, medidas estimadas: falta el cubicaje real de esta planta.</p>' : ''}
       ${f.chapasPendientes ? `<p class="aviso">Diámetro y conos de la planilla de cubicaje. Cantidad de chapas (${f.chapas}) provisoria: a confirmar en planta.</p>` : ''}
@@ -1591,7 +1607,7 @@ function pintarPanel() {
       ${f.aOjo ? '' : `<select id="selCopete" aria-label="Copete del grano">
         <option value="0"${!d.copete ? ' selected' : ''}>Enrasado</option>
         <option value="1"${d.copete === 1 ? ' selected' : ''}>Copete arriba (+${num(f.m3Copete, 2)} m³)</option>
-        <option value="-1"${d.copete === -1 ? ' selected' : ''}>Embudo abajo (−${num(f.m3Copete, 2)} m³)</option>
+        <option value="-1"${d.copete === -1 ? ' selected' : ''}>Embudo abajo (−${num(f.m3Pozo, 2)} m³)</option>
       </select>`}
     `;
     panel.querySelectorAll('[data-ch]').forEach(b => b.onclick = () => {
@@ -1766,7 +1782,7 @@ function abrirCubicaje() {
     .map(([c, tn]) => `<div><div class="rot">${nombreCereal(c)}</div><div class="cifra">${num(tn, 2)}<small> tn</small></div></div>`)
     .join('') || '<div><div class="rot">Sin existencias</div></div>';
 
-  $('cubPie').textContent = 'Las existencias salen del volumen ocupado por la densidad del cereal (maíz 0,70 · trigo 0,75 · soja 0,65 · cebada 0,60 · girasol 0,42). La columna Capacidad es la nominal de la planilla, calculada a unos 0,80 t/m³ con el techo lleno, así que siempre da más alta. Los aéreos no tienen cubicaje: van a ojo, en décimos de su capacidad. Los aéreos 1 a 7 guardan semilla y suman aparte del cereal, igual que los de urea y fertilizante. Los bolsones se cargan por metros con grano y su tonelada por metro es estimada. ▲ marca el silo con copete de carga y ▼ el que está con embudo de extracción: el volumen ya lo tiene sumado o restado, tomando el cono superior de la planilla.';
+  $('cubPie').textContent = 'Las existencias salen del volumen ocupado por la densidad del cereal (maíz 0,70 · trigo 0,75 · soja 0,65 · cebada 0,60 · girasol 0,42). La columna Capacidad es la nominal de la planilla, calculada a unos 0,80 t/m³ con el techo lleno, así que siempre da más alta. Los aéreos no tienen cubicaje: van a ojo, en décimos de su capacidad. Los aéreos 1 a 7 guardan semilla y suman aparte del cereal, igual que los de urea y fertilizante. Los bolsones se cargan por metros con grano y su tonelada por metro es estimada. ▲ marca el silo con copete de carga y ▼ el que está con embudo de extracción: el volumen ya lo tiene sumado o restado: el copete suma el cono superior de la planilla y el embudo resta el cono inferior.';
 
   document.getElementById('cubicaje').classList.add('abierto');
 }
@@ -1850,9 +1866,9 @@ function pintarPaso() {
     const it = porId(datos.circuito.previo);
     if (it) {
       const cerealCalc = $('cerealPasada') ? $('cerealPasada').value : it.dato.cereal;
-      const tnMov = estimarTn(it, chapasPaso, cerealCalc);
+      const tnMov = estimarTn(it, chapasPaso, cerealCalc, copeteFinalPaso);
       const tnTotal = volumenSilo(it.fam, it.dato) * (DENSIDAD[it.dato.cereal] || 0.7);
-      const copeteTxt = it.dato.copete === 1 ? ' — copete arriba' : it.dato.copete === -1 ? ' — copete abajo' : '';
+      const copeteTxt = ' — ' + textoForma(it.dato.copete || 0) + ' → ' + textoForma(copeteFinalPaso);
       kgEl.innerHTML = `Vas a mover ≈ ${num(tnMov * 1000, 0)} kg (${nombreCereal(cerealCalc)}, ${pasadaActual}° pasada${copeteTxt})<br>` +
         `Hay en total en el silo ${it.dato.id} ≈ ${num(tnTotal * 1000, 0)} kg`;
     } else {
@@ -1880,6 +1896,15 @@ $('prev3').onclick = () => { marcarPrevio(3); if ($('cerealPasada')) $('cerealPa
 $('prev1').onclick = () => { marcarPrevio(1); if ($('cerealPasada')) $('cerealPasada').value = 'soja'; pintarTodo(); pintarPaso(); reflejarCopetePrevio(); };
 
 let pasadaActual = 1;
+let copeteFinalPaso = -1;   /* al vaciar desde abajo, lo normal es que termine con el cono para abajo */
+const textoForma = v => v === 1 ? 'copete arriba' : v === -1 ? 'copete abajo' : 'enrasado';
+function marcarCopeteFinal(v) {
+  copeteFinalPaso = v;
+  $('finArriba').setAttribute('aria-pressed', String(v === 1));
+  $('finEnrasado').setAttribute('aria-pressed', String(v === 0));
+  $('finAbajo').setAttribute('aria-pressed', String(v === -1));
+  pintarPaso();
+}
 if ($('fechaPasada')) $('fechaPasada').value = new Date().toISOString().slice(0, 10);
 if ($('cerealPasada')) $('cerealPasada').value = 'maiz';
 function marcarCopetePrevio(valor) {
@@ -1895,6 +1920,9 @@ function marcarCopetePrevio(valor) {
 $('sentAriba').onclick = () => marcarCopetePrevio(1);
 $('sentEnrasado').onclick = () => marcarCopetePrevio(0);
 $('sentAbajo').onclick = () => marcarCopetePrevio(-1);
+$('finArriba').onclick = () => marcarCopeteFinal(1);
+$('finEnrasado').onclick = () => marcarCopeteFinal(0);
+$('finAbajo').onclick = () => marcarCopeteFinal(-1);
 $('pasada1').onclick = () => { pasadaActual = 1; $('pasada1').setAttribute('aria-pressed','true'); $('pasada2').setAttribute('aria-pressed','false'); pintarPaso(); };
 $('pasada2').onclick = () => { pasadaActual = 2; $('pasada2').setAttribute('aria-pressed','true'); $('pasada1').setAttribute('aria-pressed','false'); pintarPaso(); };
 if ($('cerealPasada')) $('cerealPasada').onchange = pintarPaso;
@@ -1930,11 +1958,13 @@ $('opSecar').onclick   = () => {
   const fecha = $('fechaPasada').value || new Date().toISOString().slice(0, 10);
   const cerealElegido = $('cerealPasada') ? $('cerealPasada').value : null;
   const itPrevio = porId(datos.circuito.previo);
-  const sentidoLog = itPrevio && itPrevio.dato.copete === 1 ? 'copete arriba' : itPrevio && itPrevio.dato.copete === -1 ? 'copete abajo' : 'enrasado';
-  const tnReal = opSecar(chapasPaso, hEnt, hSal, sentidoLog, pasadaActual, fecha, cerealElegido);
+  const sentidoLog = textoForma(itPrevio ? (itPrevio.dato.copete || 0) : 0) + ' → ' + textoForma(copeteFinalPaso);
+  const tnReal = opSecar(chapasPaso, hEnt, hSal, sentidoLog, pasadaActual, fecha, cerealElegido, copeteFinalPaso);
   if (tnReal !== undefined) {
     $('kgResultado').textContent = `Última pasada: ${num(tnReal * 1000, 0)} kg secados`;
   }
+  reflejarCopetePrevio();
+  pintarPaso();
   sincronizarCubicaje(SILOS_CIRCUITO);
 };
 $('opRepaso').onclick  = () => { opRepaso(chapasPaso); sincronizarCubicaje(SILOS_CIRCUITO); };
@@ -1964,7 +1994,7 @@ let gasCache = [];
 
 /* costo ($) del gas consumido en cada mes: lecturas de los relojes × precio promedio de las facturas */
 function costoPorMes() {
-  const c = costeoGas(lecturasGas, facturasGas);
+  const c = costeoGas(lecturasGas, facturasGas, precioFacturaUSD);
   const mapa = {};
   if (c) Object.keys(c.meses).forEach(m => { if (c.meses[m].costo) mapa[m] = c.meses[m].costo; });
   return mapa;
@@ -2041,7 +2071,7 @@ function pintarPasadasFiltradas(filas) {
     <table>
       <thead><tr>
         <th>Fecha</th><th>Cereal</th><th>Origen</th><th>Sentido</th><th>Chapas</th>
-        <th>H. ent.</th><th>H. sal.</th><th>Pasada</th><th>Destino</th><th>Toneladas</th><th>Puerto</th><th>Costo pasada ($)</th><th></th>
+        <th>H. ent.</th><th>H. sal.</th><th>Pasada</th><th>Destino</th><th>Toneladas</th><th>Puerto</th><th>Costo pasada (US$)</th><th></th>
       </tr></thead>
       <tbody>
         ${filas.slice().reverse().map((p, idx) => {
@@ -2056,7 +2086,7 @@ function pintarPasadasFiltradas(filas) {
             <td>${p.Chapas||''}</td><td>${p.HumedadEntrada||''}</td><td>${p.HumedadSalida||''}</td>
             <td>${p.Pasada||''}</td><td>${p.SiloDestino||''}</td><td><b>${p.Toneladas||''} tn</b></td>
             <td>${listaParaPuerto(p) ? 'Sí' : 'No'}</td>
-            <td>${cuota ? '$' + num(cuota, 2) : '—'}</td>
+            <td>${cuota ? 'US$ ' + num(cuota, 2) : '—'}</td>
             <td><button class="mini" data-role="borrarPasada">Borrar</button></td>
           </tr>`;
         }).join('')}
@@ -2698,7 +2728,7 @@ function normFactura(r) {
     ID: String(r.ID || ''), fecha: String(r.Fecha || '').slice(0, 10),
     nroFactura: r.NroFactura ? String(r.NroFactura) : '', nroRemito: r.NroRemito ? String(r.NroRemito) : '',
     cargaID: String(r.CargaID || ''), kg: Number(r.Kg) || 0, importe: Number(r.ImporteNeto) || 0,
-    notas: r.Notas ? String(r.Notas) : ''
+    tc: Number(r.TipoCambio) || 0, notas: r.Notas ? String(r.Notas) : ''
   };
 }
 function cargarFacturasGas(remoto) {
@@ -2706,16 +2736,18 @@ function cargarFacturasGas(remoto) {
     .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.ID.localeCompare(b.ID));
 }
 const precioFactura = f => (f && f.kg > 0 && f.importe > 0) ? f.importe / f.kg : null;
+/* en dólares: el importe de la factura se pasa a US$ con el tipo de cambio cargado en esa misma factura */
+const precioFacturaUSD = f => (f && f.kg > 0 && f.importe > 0 && f.tc > 0) ? f.importe / f.tc / f.kg : null;
 const cargasRegistradas = () => lecturasGas.filter(l => l.tipo === 'despues');
 const facturaDeCarga = id => facturasGas.find(f => f.cargaID === id);
 
 /* recorre las lecturas en orden: cada tramo de consumo se valoriza al precio promedio vigente,
    y cada carga mezcla lo que había con lo cargado, a su precio de factura */
-function costeoGas(lects, facts) {
+function costeoGas(lects, facts, precioDe = precioFactura) {
   const porCarga = new Map();
-  facts.forEach(f => { if (precioFactura(f) !== null) porCarga.set(f.cargaID, f); });
+  facts.forEach(f => { if (precioDe(f) !== null) porCarga.set(f.cargaID, f); });
   let precio = null;
-  for (const l of lects) if (l.tipo === 'despues' && porCarga.has(l.ID)) { precio = precioFactura(porCarga.get(l.ID)); break; }
+  for (const l of lects) if (l.tipo === 'despues' && porCarga.has(l.ID)) { precio = precioDe(porCarga.get(l.ID)); break; }
   if (precio === null) return null;                      // sin ninguna factura no hay costo
   const precioInicial = precio;
   let provisorio = false;
@@ -2726,7 +2758,7 @@ function costeoGas(lects, facts) {
     if (it.kg > 0) { m.costo += it.kg * precio; m.kg += it.kg; if (provisorio) m.provisorio = true; }
     if (it.carga && it.cargaRemitoKg > 0) {
       const f = porCarga.get(it.hasta.ID);
-      const precioCarga = f ? precioFactura(f) : precio;   // sin factura: provisorio al último precio
+      const precioCarga = f ? precioDe(f) : precio;   // sin factura: provisorio al último precio
       if (!f) { provisorio = true; m.provisorio = true; }
       const R = it.cargaRemitoKg;
       const antes = it.desde.tipo === 'antes' ? stockKg(it.desde) : Math.max(0, stockKg(it.hasta) - R);
@@ -2742,6 +2774,7 @@ function estadoFactura(msg, mal) {
   $('facEstado').classList.toggle('mal', !!mal);
 }
 const plata = (n, d = 0) => '$' + num(n, d);
+const usd = (n, d = 0) => 'US$ ' + num(n, d);
 
 function pintarSelectCargas() {
   const sel = $('facCarga'), previo = sel.value;
@@ -2768,6 +2801,7 @@ function completarDesdeCarga() {
   $('facRemito').value = f ? f.nroRemito : '';
   $('facNumero').value = f ? f.nroFactura : '';
   $('facImporte').value = f ? f.importe : '';
+  $('facTC').value = f && f.tc ? f.tc : '';
   $('facNotas').value = f ? f.notas : '';
   if (f && f.fecha) $('facFecha').value = f.fecha;
   pintarPreviewFactura();
@@ -2775,9 +2809,9 @@ function completarDesdeCarga() {
 
 function pintarPreviewFactura() {
   const c = lecturasGas.find(l => l.ID === $('facCarga').value);
-  const kg = Number($('facKg').value) || 0, imp = Number($('facImporte').value) || 0;
+  const kg = Number($('facKg').value) || 0, imp = Number($('facImporte').value) || 0, tc = Number($('facTC').value) || 0;
   let t = '';
-  if (kg > 0 && imp > 0) t += `Precio: ${plata(imp / kg, 2)} por kg. `;
+  if (kg > 0 && imp > 0) t += `Precio: ${plata(imp / kg, 2)} por kg` + (tc > 0 ? ` = ${usd(imp / tc / kg, 3)} por kg (total ${usd(imp / tc, 2)}). ` : '. ');
   if (c && kg > 0) {
     const dif = kg - c.remito;
     t += Math.abs(dif) < 0.5 ? `Coincide con el remito (${num(c.remito)} kg).`
@@ -2794,13 +2828,13 @@ function pintarFacturas() {
     return;
   }
   $('gasFacturas').innerHTML = `<div class="tabla-scroll"><table>
-    <thead><tr><th>Fecha</th><th>N° factura</th><th>N° remito</th><th>Carga</th><th>Kg factura</th><th>Kg remito</th><th>Control</th><th>Importe neto</th><th>$ por kg</th><th class="solo-pantalla"></th></tr></thead>
+    <thead><tr><th>Fecha</th><th>N° factura</th><th>N° remito</th><th>Carga</th><th>Kg factura</th><th>Kg remito</th><th>Control</th><th>Importe neto ($)</th><th>Tipo de cambio</th><th>Importe (US$)</th><th>$ por kg</th><th>US$ por kg</th><th class="solo-pantalla"></th></tr></thead>
     <tbody>${facturasGas.slice().reverse().map(f => {
       const c = lecturasGas.find(l => l.ID === f.cargaID);
       const dif = c ? f.kg - c.remito : null;
       const ctrl = !c ? '<span class="alerta">Carga no encontrada</span>'
         : Math.abs(dif) < 0.5 ? 'Coincide' : `<span class="alerta">${dif > 0 ? '+' : '−'}${num(Math.abs(dif))} kg</span>`;
-      const pr = precioFactura(f);
+      const pr = precioFactura(f), prU = precioFacturaUSD(f);
       return `<tr>
         <td>${f.fecha ? f.fecha.split('-').reverse().join('/') : '—'}</td>
         <td>${f.nroFactura.replace(/</g, '&lt;') || '—'}</td>
@@ -2808,7 +2842,10 @@ function pintarFacturas() {
         <td>${c ? fechaLegible(c.fh).slice(0, 8) : '—'}</td>
         <td>${num(f.kg)}</td><td>${c ? num(c.remito) : '—'}</td>
         <td class="izq">${ctrl}</td>
-        <td>${plata(f.importe, 2)}</td><td><b>${pr !== null ? plata(pr, 2) : '—'}</b></td>
+        <td>${plata(f.importe, 2)}</td>
+        <td>${f.tc > 0 ? num(f.tc, 2) : '<span class="alerta">Falta</span>'}</td>
+        <td>${f.tc > 0 ? usd(f.importe / f.tc, 2) : '—'}</td>
+        <td>${pr !== null ? plata(pr, 2) : '—'}</td><td><b>${prU !== null ? usd(prU, 3) : '—'}</b></td>
         <td class="solo-pantalla"><button class="mini" data-borrar-fac="${f.ID}">Borrar</button></td>
       </tr>`;
     }).join('')}</tbody></table></div>`;
@@ -2817,21 +2854,22 @@ function pintarFacturas() {
 
 async function guardarFactura() {
   const c = lecturasGas.find(l => l.ID === $('facCarga').value);
-  const kg = Number($('facKg').value) || 0, imp = Number($('facImporte').value) || 0;
+  const kg = Number($('facKg').value) || 0, imp = Number($('facImporte').value) || 0, tc = Number($('facTC').value) || 0;
   if (!c) { estadoFactura('Elegí a qué carga del camión corresponde la factura.', true); return; }
   if (!(kg > 0) || !(imp > 0)) { estadoFactura('Faltan los kg facturados o el importe neto.', true); return; }
+  if (!(tc > 0)) { estadoFactura('Falta el tipo de cambio: sin él no se puede pasar el costo a dólares.', true); return; }
   if (Math.abs(kg - c.remito) >= 0.5 &&
       !confirm(`La factura dice ${num(kg)} kg y el remito ${num(c.remito)} kg. ¿Guardarla igual?`)) return;
   const previa = facturaDeCarga(c.ID);
   const f = {
     ID: previa ? previa.ID : 'F' + Date.now(), fecha: $('facFecha').value || hoyLocal(),
     nroFactura: $('facNumero').value.trim(), nroRemito: $('facRemito').value.trim(),
-    cargaID: c.ID, kg, importe: imp, notas: $('facNotas').value.trim()
+    cargaID: c.ID, kg, importe: imp, tc, notas: $('facNotas').value.trim()
   };
   $('facGuardar').disabled = true;
   const res = await postSheet('FacturasGas', 'upsert', {
     ID: f.ID, Fecha: f.fecha, NroFactura: f.nroFactura, NroRemito: f.nroRemito,
-    CargaID: f.cargaID, Kg: f.kg, ImporteNeto: f.importe, Notas: f.notas
+    CargaID: f.cargaID, Kg: f.kg, ImporteNeto: f.importe, TipoCambio: f.tc, Notas: f.notas
   }, 'ID');
   $('facGuardar').disabled = false;
   if (!subidaOk(res)) {
@@ -2840,7 +2878,7 @@ async function guardarFactura() {
   }
   facturasGas = facturasGas.filter(x => x.ID !== f.ID).concat(f).sort((a, b) => a.fecha.localeCompare(b.fecha) || a.ID.localeCompare(b.ID));
   estadoFactura(previa ? 'Factura actualizada.' : 'Factura guardada.');
-  anotar(`Factura de gas ${f.nroFactura || ''} guardada: ${num(f.kg)} kg a ${plata(f.importe / f.kg, 2)}/kg`);
+  anotar(`Factura de gas ${f.nroFactura || ''} guardada: ${num(f.kg)} kg a ${usd(f.importe / f.tc / f.kg, 3)}/kg`);
   refrescarGas();
 }
 
@@ -2858,42 +2896,45 @@ function pintarGasTabla(pasadas) {
   const listasPorMes = tnListasPorMes(pasadas);
   const puntosPorMes = tnPuntosPorMes(pasadas);
   const relojes = resumenPorMes(lecturasGas);
-  const costeo = costeoGas(lecturasGas, facturasGas);
+  const enPesos = costeoGas(lecturasGas, facturasGas, precioFactura);
+  const enDolares = costeoGas(lecturasGas, facturasGas, precioFacturaUSD);
   const meses = [...new Set([...Object.keys(listasPorMes), ...Object.keys(relojes)])].filter(Boolean).sort().reverse();
   if (!meses.length) {
     $('gasTabla').innerHTML = '<p class="vacio">Todavía no hay datos. Cargá una lectura de los relojes.</p>';
     return;
   }
-  const hayProvisorio = costeo && Object.values(costeo.meses).some(m => m.provisorio);
+  const faltaTC = facturasGas.some(f => !(f.tc > 0));
+  const hayProvisorio = enDolares && Object.values(enDolares.meses).some(m => m.provisorio);
   $('gasTabla').innerHTML = `<div class="tabla-scroll"><table>
-    <thead><tr><th>Mes</th><th>Consumo relojes (kg)</th><th>Balance con remitos (kg)</th><th>Costo del gas ($)</th><th>Tn listas para puerto</th><th>Kg gas / tn</th><th>Kg gas / tn·punto</th><th>Costo / tn lista ($)</th></tr></thead>
+    <thead><tr><th>Mes</th><th>Consumo relojes (kg)</th><th>Balance con remitos (kg)</th><th>Costo del gas (US$)</th><th>Costo del gas ($)</th><th>Tn listas para puerto</th><th>Kg gas / tn</th><th>Kg gas / tn·punto</th><th>Costo / tn lista (US$)</th></tr></thead>
     <tbody>${meses.map(mes => {
       const r = relojes[mes];
       const kg = r && r.intervalos ? r.relojKg : null;
       const balance = r && r.balanceKg !== null && r.balanceKg !== undefined ? r.balanceKg : null;
       const listo = listasPorMes[mes] || 0;
-      const cm = costeo && costeo.meses[mes];
-      const costo = cm && cm.costo ? cm.costo : null;
-      const marca = cm && cm.provisorio ? ' *' : '';
+      const cu = enDolares && enDolares.meses[mes], cp = enPesos && enPesos.meses[mes];
+      const costoU = cu && cu.costo ? cu.costo : null, costoP = cp && cp.costo ? cp.costo : null;
+      const marcaU = cu && cu.provisorio ? ' *' : '', marcaP = cp && cp.provisorio ? ' *' : '';
       return `<tr>
         <td>${mes}</td>
         <td>${kg !== null ? '<b>' + num(kg) + '</b>' : '—'}${r && r.avisos ? ' <span class="alerta" title="Hay tramos con avisos: mirá la tabla de lecturas">⚠</span>' : ''}</td>
         <td>${balance !== null ? num(balance) : '—'}</td>
-        <td>${costo !== null ? plata(costo) + marca : '—'}</td>
+        <td><b>${costoU !== null ? usd(costoU, 2) + marcaU : '—'}</b></td>
+        <td>${costoP !== null ? plata(costoP) + marcaP : '—'}</td>
         <td>${num(listo, 2)} tn</td>
         <td><b>${kg && listo ? num(kg / listo, 2) : '—'}</b></td>
         <td>${kg && puntosPorMes[mes] ? num(kg / puntosPorMes[mes], 2) : '—'}</td>
-        <td><b>${costo !== null && listo ? plata(costo / listo, 2) + marca : '—'}</b></td>
+        <td><b>${costoU !== null && listo ? usd(costoU / listo, 2) + marcaU : '—'}</b></td>
       </tr>`;
     }).join('')}</tbody></table></div>
-    <p class="nota">${costeo
-      ? `Precio promedio del gas que hay hoy en los tubos: <b>${plata(costeo.precioActual, 2)} por kg</b>.${hayProvisorio ? ' * Provisorio: falta la factura de alguna carga.' : ''}`
-      : 'Para ver costos, cargá la factura de al menos una carga del camión.'}</p>`;
+    <p class="nota">${enDolares
+      ? `Precio promedio del gas que hay hoy en los tubos: <b>${usd(enDolares.precioActual, 3)} por kg</b>${enPesos ? ` (${plata(enPesos.precioActual, 2)} por kg)` : ''}.${hayProvisorio ? ' * Provisorio: falta la factura o el tipo de cambio de alguna carga.' : ''}`
+      : (facturasGas.length ? 'Para ver costos en dólares, cargá el tipo de cambio en las facturas.' : 'Para ver costos, cargá la factura de al menos una carga del camión.')}${faltaTC && enDolares ? ' Hay facturas sin tipo de cambio: completalo para que el costo en dólares sea exacto.' : ''}</p>`;
 }
 
 /* eventos de facturas */
 $('facCarga').addEventListener('change', completarDesdeCarga);
-['facKg', 'facImporte'].forEach(id => $(id).addEventListener('input', pintarPreviewFactura));
+['facKg', 'facImporte', 'facTC'].forEach(id => $(id).addEventListener('input', pintarPreviewFactura));
 $('facGuardar').onclick = guardarFactura;
 
 /* jornada guionada */
