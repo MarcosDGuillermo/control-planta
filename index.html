@@ -1,0 +1,2890 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cereales Lobería — control de planta</title>
+<link rel="icon" type="image/png" href="icon-192.png" id="favicon">
+<meta name="theme-color" content="#4A585C">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Planta">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+<style>
+  :root {
+    --linea:  #B9C1C0;
+    --steel:  #4A585C;
+    --ink:    #1E2628;
+    --tenue:  #6E7B7E;
+    --alerta: #A8642B;
+    --vidrio: rgba(255,255,255,0.93);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: #D6DBDB; color: var(--ink);
+    font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 14px; -webkit-font-smoothing: antialiased;
+  }
+  #escena { position: fixed; inset: 0; }
+  canvas { display: block; touch-action: none; }
+  button { font: inherit; cursor: pointer; }
+  button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  /* ---------- cabecera ---------- */
+  .marca { position: fixed; top: 14px; left: 16px; }
+  .marca h1 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.015em; }
+  .marca p { margin: 2px 0 9px; font-size: 11.5px; color: var(--tenue); max-width: 220px; }
+  .plantas { display: flex; border: 1px solid var(--steel); width: max-content; }
+  .plantas button { border: 0; background: var(--vidrio); color: var(--ink); font-size: 12px; padding: 5px 10px; }
+  .plantas button + button { border-left: 1px solid var(--steel); }
+  .plantas button[aria-pressed="true"] { background: var(--steel); color: #fff; }
+
+  /* ---------- indicadores ---------- */
+  .kpis {
+    position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+    display: flex; background: var(--vidrio); border: 1px solid var(--ink);
+  }
+  .kpis div { padding: 8px 15px; min-width: 104px; }
+  .kpis div + div { border-left: 1px solid var(--linea); }
+  .kpis .rot { font-size: 10.5px; color: var(--tenue); white-space: nowrap; }
+  .kpis .cifra { font-size: 19px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .kpis .cifra small { font-size: 11px; font-weight: 400; color: var(--tenue); margin-left: 2px; }
+
+  /* ---------- panel derecho ---------- */
+  .panel {
+    position: fixed; top: 14px; right: 14px; width: 252px;
+    background: var(--vidrio); border: 1px solid var(--linea);
+    padding: 14px; max-height: calc(100vh - 210px); overflow-y: auto;
+  }
+  .panel .vacio { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--tenue); }
+  .panel h2 { margin: 0 0 2px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+  .panel .rol { margin: 0 0 10px; font-size: 12px; color: var(--tenue); }
+  .dato { display: flex; justify-content: space-between; align-items: baseline; padding: 5px 0; border-top: 1px solid var(--linea); font-size: 12.5px; }
+  .dato span:last-child { font-variant-numeric: tabular-nums; font-weight: 500; }
+  .dato.principal span:last-child { font-size: 16px; }
+  .dato.dudoso span:last-child { color: var(--alerta); }
+  .aviso { margin: 10px 0 0; font-size: 11px; line-height: 1.45; color: var(--alerta); }
+  .nota { margin: 10px 0 0; font-size: 11px; line-height: 1.45; color: var(--tenue); }
+  .mezcla { margin-top: 11px; }
+  .mezcla .barra { display: flex; height: 10px; border: 1px solid var(--linea); }
+  .mezcla .barra i { display: block; height: 100%; }
+  .mezcla .pie { display: flex; justify-content: space-between; font-size: 11px; color: var(--tenue); margin-top: 4px; }
+
+  /* ---------- consola ---------- */
+  .consola {
+    position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
+    background: var(--vidrio); border: 1px solid var(--ink);
+    display: flex; flex-wrap: wrap; align-items: stretch; max-width: calc(100vw - 580px);
+  }
+  .consola .grupo { padding: 9px 12px; display: flex; flex-direction: column; gap: 6px; }
+  .consola .grupo + .grupo { border-left: 1px solid var(--linea); }
+  .consola .rot { font-size: 10.5px; color: var(--tenue); }
+  .consola .botones { display: flex; gap: 6px; }
+  .consola button {
+    border: 1px solid var(--linea); background: #fff; color: var(--ink);
+    font-size: 12.5px; padding: 6px 10px; white-space: nowrap;
+  }
+  .consola button:hover:not(:disabled) { border-color: var(--steel); }
+  .consola button:disabled { opacity: 0.4; cursor: default; }
+  .consola button.fuerte { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .consola .paso { display: flex; align-items: center; gap: 7px; }
+  .consola .paso b { font-variant-numeric: tabular-nums; min-width: 26px; text-align: center; font-size: 13px; }
+  .consola .paso button { padding: 3px 9px; }
+
+  /* ---------- bitácora ---------- */
+  .bitacora {
+    position: fixed; right: 14px; bottom: 14px; width: 252px;
+    max-height: 40vh; overflow-y: auto;
+    background: var(--vidrio); border: 1px solid var(--linea); padding: 10px 12px;
+  }
+  .bitacora h3 { margin: 0 0 6px; font-size: 11px; font-weight: 500; color: var(--tenue); }
+  .bitacora ol { margin: 0; padding: 0; list-style: none; font-size: 12px; line-height: 1.45; }
+  .bitacora li { padding: 3px 0; border-top: 1px solid var(--linea); }
+  .bitacora li:first-child { border-top: 0; }
+  .bitacora li span { color: var(--tenue); font-variant-numeric: tabular-nums; }
+  .bitacora .nada { color: var(--tenue); font-size: 12px; }
+
+  .mando { display: flex; align-items: center; gap: 7px; margin-top: 11px; }
+  .mando button { width: 28px; height: 28px; border: 1px solid var(--linea); background: #fff; font-size: 15px; line-height: 1; }
+  .mando button:hover { border-color: var(--steel); }
+  .mando .lectura { flex: 1; text-align: center; font-size: 11.5px; color: var(--tenue); }
+  .mando .quitar { width: 100%; height: 28px; border: 1px solid var(--alerta); background: #fff; color: var(--alerta); font-size: 12px; }
+  .panel select { width: 100%; margin-top: 7px; padding: 5px 6px; font: inherit; font-size: 12.5px; border: 1px solid var(--linea); background: #fff; }
+
+  /* ---------- cubicaje ---------- */
+  .cubicaje {
+    position: fixed; inset: 0; background: rgba(30,38,40,0.4);
+    display: none; align-items: center; justify-content: center; padding: 20px;
+  }
+  .cubicaje.abierto { display: flex; }
+  .cubicaje .hoja {
+    background: #fff; border: 1px solid var(--ink); width: 100%; max-width: 720px;
+    max-height: calc(100vh - 40px); overflow-y: auto; padding: 20px 22px 22px;
+  }
+  #modalGas .hoja, #modalConfig .hoja { max-width: 1100px; }
+  .tabla-scroll { overflow-x: auto; }
+  .cubicaje h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.015em; }
+  .cubicaje .sub { margin: 3px 0 16px; font-size: 12.5px; color: var(--tenue); }
+  .cubicaje table { width: 100%; border-collapse: collapse; }
+  .cubicaje th, .cubicaje td { padding: 6px 8px; font-size: 12.5px; text-align: right; border-top: 1px solid var(--linea); }
+  .cubicaje th { font-size: 10.5px; font-weight: 500; color: var(--tenue); border-top: 0; }
+  .cubicaje th:first-child, .cubicaje td:first-child,
+  .cubicaje th:nth-child(2), .cubicaje td:nth-child(2) { text-align: left; }
+  .cubicaje td { font-variant-numeric: tabular-nums; }
+  .cubicaje tr.vacia td { color: var(--tenue); }
+  .cubicaje tfoot td { border-top: 2px solid var(--ink); font-weight: 600; }
+  .cubicaje .totales { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 0; }
+  .cubicaje .totales div { border: 1px solid var(--linea); padding: 8px 12px; min-width: 108px; }
+  .cubicaje .totales .rot { font-size: 10.5px; color: var(--tenue); }
+  .cubicaje .totales .cifra { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .cubicaje .mandos { display: flex; gap: 8px; margin-top: 18px; }
+  .cubicaje .cerrar { border: 1px solid var(--ink); background: var(--ink); color: #fff; font-size: 13px; padding: 7px 14px; }
+  .cubicaje .imprimir { border: 1px solid var(--ink); background: #fff; color: var(--ink); font-size: 13px; padding: 7px 14px; }
+  .cubicaje .pie { font-size: 11.5px; color: var(--alerta); margin: 14px 0 0; line-height: 1.45; }
+
+
+  /* ---------- gas: lecturas manuales de los relojes ---------- */
+  .cubicaje h3.gas-h { margin: 22px 0 6px; font-size: 14px; font-weight: 600; }
+  .gas-form { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin: 8px 0 6px; }
+  .gas-form label { font-size: 11px; color: var(--tenue); display: flex; flex-direction: column; gap: 2px; }
+  .gas-form input, .gas-form select { padding: 5px 7px; border: 1px solid var(--linea); font: inherit; font-size: 13px; background: #fff; color: var(--ink); }
+  .gas-form input[type="number"] { width: 84px; }
+  .gas-form button.fuerte { background: var(--ink); color: #fff; border: 1px solid var(--ink); padding: 7px 14px; font-size: 13px; }
+  .gas-form button:disabled { opacity: 0.5; cursor: default; }
+  .gas-preview { margin: 6px 0 0; font-size: 12.5px; min-height: 18px; }
+  .gas-estado { margin: 4px 0 0; font-size: 11.5px; color: var(--tenue); min-height: 16px; line-height: 1.45; }
+  .gas-estado.mal { color: var(--alerta); }
+  .gas-detalle { margin: 16px 0 0; border-top: 1px solid var(--linea); padding-top: 10px; }
+  .gas-detalle summary { cursor: pointer; font-size: 13px; }
+  .cubicaje td.izq { text-align: left; }
+  .cubicaje td .alerta { color: var(--alerta); }
+  @media print { .gas-form, .gas-detalle, .gas-preview, .gas-estado, .solo-pantalla { display: none !important; } }
+
+  /* ---------- clave de acceso ---------- */
+  .velo { position: fixed; inset: 0; z-index: 100; background: rgba(30,38,40,0.6); display: none; align-items: center; justify-content: center; padding: 20px; }
+  .velo.abierto { display: flex; }
+  .velo .caja { background: #fff; border: 1px solid var(--ink); width: 100%; max-width: 380px; padding: 20px 22px 22px; }
+  .velo h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.015em; }
+  .velo .sub { margin: 3px 0 14px; font-size: 12.5px; color: var(--tenue); line-height: 1.45; }
+  .velo input { width: 100%; padding: 8px 9px; border: 1px solid var(--linea); font: inherit; font-size: 15px; }
+  .velo .aviso { margin: 8px 0 0; min-height: 16px; font-size: 12px; color: var(--alerta); }
+  .velo .botones2 { display: flex; gap: 8px; margin-top: 14px; }
+  .velo .botones2 button { padding: 7px 14px; font-size: 13px; border: 1px solid var(--ink); background: #fff; color: var(--ink); }
+  .velo .botones2 button.fuerte { background: var(--ink); color: #fff; }
+  @media print { .velo { display: none !important; } }
+
+  /* ---------- impresión del informe ---------- */
+  @media print {
+    @page { margin: 14mm; }
+    html, body { height: auto; overflow: visible; background: #fff; }
+    body > * { display: none !important; }
+    body > .cubicaje.abierto { display: block !important; position: static; inset: auto; padding: 0; background: #fff; }
+    .cubicaje .hoja { border: 0; max-width: none; max-height: none; overflow: visible; padding: 0; }
+    .cubicaje .mandos { display: none !important; }
+    .cubicaje .pie { color: #444; }
+    .cubicaje th, .cubicaje td { padding: 4px 6px; font-size: 10.5px; }
+    .cubicaje .totales div { break-inside: avoid; }
+    tr, tfoot { break-inside: avoid; }
+    thead { display: table-header-group; }
+  }
+
+  .ayuda { position: fixed; left: 16px; bottom: 16px; font-size: 11px; color: var(--tenue); max-width: 180px; }
+
+  @media (max-width: 900px) {
+    .kpis { top: auto; bottom: 128px; left: 8px; transform: none; right: 8px; overflow-x: auto; }
+    .kpis div { min-width: 88px; padding: 7px 11px; }
+    .panel { top: 92px; right: 8px; width: 210px; max-height: 40vh; }
+    .bitacora { display: none; }
+    .ayuda { display: none; }
+    .consola { flex-wrap: wrap; left: 8px; right: 8px; transform: none; max-width: none; }
+  }
+</style>
+
+<div id="escena"></div>
+
+<div class="marca" style="display:flex;align-items:center;gap:14px;">
+  <img data-logo alt="Cereales Lobería" style="width:56px;height:56px;flex-shrink:0;">
+  <div>
+  <h1 id="titulo">Planta Mónaco</h1>
+  <p id="bajada">Disposición según el plano de planta. Niveles por chapa.</p>
+  <div class="plantas">
+    <button id="btnMonaco" aria-pressed="true">Mónaco</button>
+    <button id="btnVirgen" aria-pressed="false">La Virgen</button>
+  </div>
+  <div class="plantas" id="tabsModulo" style="margin-top:6px;">
+    <button id="tabCubicaje" aria-pressed="true">Cubicaje</button>
+    <button id="tabSecado" aria-pressed="false">Secado</button>
+  </div>
+  </div>
+</div>
+
+<div class="kpis" id="kpis">
+  <div><div class="rot">Procesó la secadora</div><div class="cifra" id="kProc">0<small>tn</small></div></div>
+  <div><div class="rot">Mercadería secada</div><div class="cifra" id="kSeca">0<small>tn</small></div></div>
+  <div><div class="rot" id="kGasRot">Gas del mes</div><div class="cifra" id="kGas">—</div></div>
+  <div><div class="rot" id="kRatioRot">Gas por tn lista</div><div class="cifra" id="kRatio">—</div></div>
+</div>
+
+<aside class="panel" id="panel"></aside>
+
+<div class="consola" id="consola">
+  <div class="grupo">
+    <div class="rot">Chapas del movimiento</div>
+    <div class="paso">
+      <button id="menos" aria-label="Menos chapas">−</button>
+      <b id="chapas">3</b>
+      <button id="mas" aria-label="Más chapas">+</button>
+    </div>
+    <p class="hint" id="kgMovimiento" style="margin:4px 0 0;font-size:12px;color:var(--tenue);"></p>
+    <p class="hint" id="kgResultado" style="margin:2px 0 0;font-size:12px;color:var(--tenue);"></p>
+  </div>
+  <div class="grupo" id="grupoPrevio">
+    <div class="rot">Silo previo</div>
+    <div class="plantas">
+      <button id="prev3" aria-pressed="true">3</button>
+      <button id="prev1" aria-pressed="false">1</button>
+    </div>
+  </div>
+  <div class="grupo" id="grupoOperar">
+    <div class="rot">Operar</div>
+    <div class="botones">
+      <button id="opIngreso">Entra húmedo</button>
+      <button id="opSecar">Pasar por secadora</button>
+      <button id="opRepaso">Volver a repasar</button>
+    </div>
+  </div>
+  <div class="grupo" id="grupoSecadoDatos">
+    <div class="rot">Datos de la pasada</div>
+    <div class="botones" style="flex-wrap:wrap;gap:8px;">
+      <label style="font-size:11px;color:var(--tenue);display:flex;flex-direction:column;gap:2px;">Fecha
+        <input id="fechaPasada" type="date" style="width:120px;padding:4px 6px;border:1px solid var(--linea);font:inherit;">
+      </label>
+      <label style="font-size:11px;color:var(--tenue);display:flex;flex-direction:column;gap:2px;">Cereal
+        <select id="cerealPasada" style="width:90px;padding:4px 6px;border:1px solid var(--linea);font:inherit;">
+          <option value="maiz">Maíz</option>
+          <option value="soja">Soja</option>
+          <option value="trigo">Trigo</option>
+          <option value="cebada">Cebada</option>
+          <option value="girasol">Girasol</option>
+        </select>
+      </label>
+      <label style="font-size:11px;color:var(--tenue);display:flex;flex-direction:column;gap:2px;">Hum. entrada
+        <input id="humEntrada" type="number" step="0.1" value="18.2" style="width:64px;padding:4px 6px;border:1px solid var(--linea);font:inherit;">
+      </label>
+      <label style="font-size:11px;color:var(--tenue);display:flex;flex-direction:column;gap:2px;">Hum. salida
+        <input id="humSalida" type="number" step="0.1" value="15.6" style="width:64px;padding:4px 6px;border:1px solid var(--linea);font:inherit;">
+      </label>
+    </div>
+    <div class="plantas" style="margin-top:4px;">
+      <button id="sentAriba" aria-pressed="true">Copete arriba (recién cargado)</button>
+      <button id="sentEnrasado" aria-pressed="false">Enrasado</button>
+      <button id="sentAbajo" aria-pressed="false">Copete abajo (vaciándose)</button>
+    </div>
+    <div class="plantas" style="margin-top:4px;">
+      <button id="pasada1" aria-pressed="true">1° pasada</button>
+      <button id="pasada2" aria-pressed="false">2° pasada</button>
+    </div>
+  </div>
+  <div class="grupo" id="grupoCircuito">
+    <div class="rot">Circuito</div>
+    <div class="botones">
+      <button id="opCircuito" aria-pressed="false">Ver circuito</button>
+    </div>
+  </div>
+  <div class="grupo" id="grupoBolsas">
+    <div class="rot">Hacer bolsón</div>
+    <div class="plantas" id="largos">
+      <button data-largo="60" aria-pressed="true">60 m</button>
+      <button data-largo="66" aria-pressed="false">66 m</button>
+      <button data-largo="75" aria-pressed="false">75 m</button>
+    </div>
+    <div class="botones" id="destinos"></div>
+  </div>
+  <div class="grupo" id="grupoInformeCubicaje">
+    <div class="rot">Cubicaje</div>
+    <div class="botones">
+      <button id="opCubicaje">Ver informe</button>
+    </div>
+  </div>
+  <div class="grupo" id="grupoInformeSecado">
+    <div class="rot">Secado</div>
+    <div class="botones">
+      <button id="opPasadas">Ver pasadas</button>
+      <button id="opGas">Consumo de gas</button>
+    </div>
+  </div>
+  <div class="grupo" id="grupoDemo">
+    <div class="rot">Demostración</div>
+    <div class="botones">
+      <button id="opJornada" class="fuerte">Simular jornada</button>
+      <button id="opReset">Reiniciar</button>
+    </div>
+  </div>
+  <div class="grupo">
+    <div class="rot">Ajustes</div>
+    <div class="botones">
+      <button id="opConfig">Configuración</button>
+    </div>
+  </div>
+</div>
+
+<div class="bitacora">
+  <h3>Movimientos</h3>
+  <ol id="log"><li class="nada">Todavía no se movió nada.</li></ol>
+</div>
+
+<div class="cubicaje" id="cubicaje">
+  <div class="hoja">
+    <img data-logo alt="Cereales Lobería" style="width:60px;height:60px;display:block;margin-bottom:8px;">
+    <h2 id="cubTitulo">Cubicaje</h2>
+    <p class="sub" id="cubSub"></p>
+    <div id="cubTabla"></div>
+    <div class="totales" id="cubTotales"></div>
+    <p class="pie" id="cubPie"></p>
+    <div class="mandos">
+      <button class="imprimir" id="cubImprimir">Imprimir</button>
+      <button class="cerrar" id="cubCerrar">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<div class="cubicaje" id="modalPasadas">
+  <div class="hoja">
+    <img data-logo alt="Cereales Lobería" style="width:60px;height:60px;display:block;margin-bottom:8px;">
+    <h2>Pasadas por la secadora</h2>
+    <p class="sub" id="pasSub">Registro tomado de la Sheet</p>
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;">
+      <label style="font-size:11px;color:var(--tenue);display:flex;flex-direction:column;gap:2px;">Mes
+        <select id="pasFiltroMes" style="padding:5px 7px;border:1px solid var(--linea);font:inherit;min-width:140px;"></select>
+      </label>
+      <label style="font-size:11px;color:var(--tenue);display:flex;flex-direction:column;gap:2px;">Desde
+        <input type="date" id="pasFiltroDesde" style="padding:5px 7px;border:1px solid var(--linea);font:inherit;">
+      </label>
+      <label style="font-size:11px;color:var(--tenue);display:flex;flex-direction:column;gap:2px;">Hasta
+        <input type="date" id="pasFiltroHasta" style="padding:5px 7px;border:1px solid var(--linea);font:inherit;">
+      </label>
+      <button class="mini" id="pasFiltrar">Filtrar</button>
+      <button class="mini" id="pasLimpiarFiltro">Ver todo</button>
+      <button class="mini" id="pasDescargar">Descargar CSV</button>
+    </div>
+    <div id="pasTabla"></div>
+    <p class="pie" id="pasPie">Fecha, cereal, silo previo, sentido de conteo, chapas, humedad de entrada y salida, número de pasada, silo destino, toneladas y si quedó disponible para cargar a puerto (humedad de salida ≤ tolerancia del cereal: maíz 14,5, soja 13,5, trigo y cebada 14, girasol 11). "Costo pasada" reparte el costo total del mes (de "Consumo de gas") entre todas las pasadas de ese mes, proporcional a cuántas toneladas pesó cada una.</p>
+    <div class="mandos">
+      <button class="imprimir" id="pasImprimir">Imprimir</button>
+      <button class="cerrar" id="pasCerrar">Cerrar</button>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="cubicaje" id="modalConfig">
+  <div class="hoja">
+    <img data-logo alt="Cereales Lobería" style="width:60px;height:60px;display:block;margin-bottom:8px;">
+    <h2>Configuración</h2>
+    <p class="sub">Densidades por cereal y datos de cada silo — se guardan directo en la Sheet.</p>
+
+    <h3 style="margin:14px 0 6px;">Densidades por cereal</h3>
+    <div id="configDensidades"></div>
+    <div style="display:flex;gap:8px;margin:8px 0 20px;align-items:flex-end;">
+      <label style="font-size:11px;color:var(--tenue);display:flex;flex-direction:column;gap:2px;">Cereal nuevo
+        <input id="nuevoCerealNombre" type="text" placeholder="ej. Avena" style="padding:5px 7px;border:1px solid var(--linea);font:inherit;width:160px;">
+      </label>
+      <label style="font-size:11px;color:var(--tenue);display:flex;flex-direction:column;gap:2px;">Densidad (t/m³)
+        <input id="nuevoCerealDensidad" type="number" step="0.01" style="padding:5px 7px;border:1px solid var(--linea);font:inherit;width:100px;">
+      </label>
+      <button class="mini" id="agregarCereal">+ Agregar cereal</button>
+    </div>
+
+    <h3 style="margin:14px 0 6px;">Datos de cada silo</h3>
+    <p class="pie" style="margin-bottom:8px;">Ojo: el diámetro y los conos son propios de la familia del silo (370 / 485 / 1.481 / Plano) — cambiar uno de estos valores actualiza todos los silos de esa misma familia, no solo el que edites.</p>
+    <div id="configSilos"></div>
+
+    <h3 style="margin:14px 0 6px;">Silos aéreos</h3>
+    <p class="pie" style="margin-bottom:8px;">Cada aéreo tiene sus propias medidas: cambiar uno no toca a los demás. Se llevan a ojo, así que las toneladas salen de la capacidad nominal.</p>
+    <div id="configAereos"></div>
+
+    <div class="mandos">
+      <button class="cerrar" id="configCerrar">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<div class="cubicaje" id="modalGas">
+  <div class="hoja">
+    <img data-logo alt="Cereales Lobería" style="width:60px;height:60px;display:block;margin-bottom:8px;">
+    <h2>Consumo de gas</h2>
+    <p class="sub">Anotá lo que marca el reloj de cada tubo. La app lo pasa a kg de propano, calcula cuánto bajó desde la lectura anterior y lo cruza con las toneladas del mes.</p>
+
+    <h3 class="gas-h solo-pantalla" style="margin-top:6px;">Nueva lectura</h3>
+    <div class="gas-form">
+      <label>Fecha
+        <input type="date" id="lecFecha">
+      </label>
+      <label>Hora
+        <input type="time" id="lecHora">
+      </label>
+      <label>Momento
+        <select id="lecTipo">
+          <option value="lectura">Lectura común</option>
+          <option value="antes">Antes de la carga del camión</option>
+          <option value="despues">Después de la carga del camión</option>
+        </select>
+      </label>
+      <label>Tubo 1 (%)
+        <input type="number" id="lecT1" min="0" max="100" step="0.5" inputmode="decimal">
+      </label>
+      <label>Tubo 2 (%)
+        <input type="number" id="lecT2" min="0" max="100" step="0.5" inputmode="decimal">
+      </label>
+      <label>Tubo 3 (%)
+        <input type="number" id="lecT3" min="0" max="100" step="0.5" inputmode="decimal">
+      </label>
+      <label id="lecRemitoBox" style="display:none;">Kg del remito
+        <input type="number" id="lecRemito" min="0" step="1" inputmode="decimal" style="width:100px;">
+      </label>
+      <label>Notas
+        <input type="text" id="lecNotas" style="width:150px;">
+      </label>
+      <button class="fuerte" id="lecGuardar">Guardar lectura</button>
+    </div>
+    <p class="gas-preview" id="lecPreview"></p>
+    <p class="gas-estado" id="lecEstado"></p>
+
+    <h3 class="gas-h">Consumo por mes</h3>
+    <div id="gasTabla"></div>
+
+    <h3 class="gas-h">Lecturas cargadas</h3>
+    <div id="gasLecturas"></div>
+
+    <p class="pie">Los kg salen de: puntos de % × litros del tubo × densidad del propano. El reloj tiene un error de 1 o 2 puntos, así que conviene mirar el mes y no una lectura suelta. "Balance con remitos" es lo que había en los tubos al empezar, más los kg de los remitos, menos lo que quedó al final: si se aleja mucho de "Relojes", hay un reloj mal leído o una carga sin anotar. Las toneladas listas son las de las pasadas con humedad de salida dentro de la tolerancia.</p>
+
+    <details class="gas-detalle">
+      <summary>Datos de factura de un mes</summary>
+      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:12px 0 4px;">
+        <label style="font-size:11px;color:var(--tenue);display:flex;flex-direction:column;gap:2px;">Mes
+          <input type="month" id="gasMes" style="padding:5px 7px;border:1px solid var(--linea);font:inherit;">
+        </label>
+        <label style="font-size:11px;color:var(--tenue);display:flex;flex-direction:column;gap:2px;">Consumo
+          <input type="number" step="0.01" id="gasConsumo" placeholder="m³ o litros" style="padding:5px 7px;border:1px solid var(--linea);font:inherit;width:120px;">
+        </label>
+        <label style="font-size:11px;color:var(--tenue);display:flex;flex-direction:column;gap:2px;">Tarifa ($/m³ o $/litro)
+          <input type="number" step="0.01" id="gasTarifa" style="padding:5px 7px;border:1px solid var(--linea);font:inherit;width:120px;">
+        </label>
+        <label style="font-size:11px;color:var(--tenue);display:flex;flex-direction:column;gap:2px;">Notas
+          <input type="text" id="gasNotas" style="padding:5px 7px;border:1px solid var(--linea);font:inherit;width:160px;">
+        </label>
+        <button class="mini" id="gasGuardar">+ Agregar mes nuevo</button>
+      </div>
+    </details>
+
+    <details class="gas-detalle">
+      <summary>Tubos y densidad</summary>
+      <div class="gas-form" style="margin-top:12px;">
+        <label>Densidad del propano (kg/L)
+          <input type="number" id="parDens" step="0.001" style="width:110px;">
+        </label>
+        <label>Tubo 1 (litros)
+          <input type="number" id="parL1" step="1" style="width:90px;">
+        </label>
+        <label>Tubo 2 (litros)
+          <input type="number" id="parL2" step="1" style="width:90px;">
+        </label>
+        <label>Tubo 3 (litros)
+          <input type="number" id="parL3" step="1" style="width:90px;">
+        </label>
+        <button class="mini" id="parGuardar">Guardar</button>
+      </div>
+      <p class="pie" style="color:var(--tenue);">Capacidades según la chapa de cada tanque (Lapesa, 6,43 m³ de agua). La densidad de 0,51 es aproximada: confirmala con YPF Gas. Estos valores se guardan en este equipo.</p>
+    </details>
+
+    <div class="mandos">
+      <button class="imprimir" id="gasImprimir">Imprimir</button>
+      <button class="cerrar" id="gasCerrar">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<div class="velo" id="modalClave" role="dialog" aria-modal="true" aria-labelledby="claveTitulo">
+  <div class="caja">
+    <img data-logo alt="Cereales Lobería" style="width:52px;height:52px;display:block;margin-bottom:8px;">
+    <h2 id="claveTitulo">Clave de acceso</h2>
+    <p class="sub">Ingresá la clave para ver y guardar los datos de la planta. Se te pide una sola vez en este equipo.</p>
+    <input type="password" id="claveInput" autocomplete="current-password" aria-label="Clave de acceso">
+    <p class="aviso" id="claveAviso"></p>
+    <div class="botones2">
+      <button class="fuerte" id="claveOk">Entrar</button>
+      <button id="claveSin">Seguir sin conexión</button>
+    </div>
+  </div>
+</div>
+
+<p class="ayuda">Arrastrá para girar la planta. Tocá un silo, un tubo o una bolsa para ver su carga.</p>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ============================================================
+   DATOS
+   Capacidades, chapas y conos: "Capacidad Planta Monaco.xlsx".
+   Posiciones: calcadas del plano de planta.
+   La Virgen: diámetros y conos de "Cubicaje Planta La Virgen.xls" (hojas Silo 1 a 7);
+   chapas por silo pendientes de confirmar en planta (7 provisorias). Posiciones aproximadas.
+   ============================================================ */
+
+const DENSIDAD = { maiz: 0.70, soja: 0.65, trigo: 0.75, cebada: 0.60, cervecera: 0.60, girasol: 0.42, urea: 0.77, fertilizante: 1.00, vacio: 0 };
+const COLORES  = { maiz: 0xE0A92B, soja: 0x8DA455, trigo: 0xD2B978, cebada: 0xBB8A50, cervecera: 0xC9A76B, girasol: 0x6A5F52, urea: 0xF1EDE0, fertilizante: 0x9AAFBE, vacio: 0xFFFFFF };
+const COLOR_REPASO = { maiz: 0xB07A16, soja: 0x5F7434, girasol: 0x4C443A };
+const CSS_COLOR = { maiz: '#E0A92B', soja: '#8DA455', trigo: '#D2B978', cebada: '#BB8A50', cervecera: '#C9A76B', girasol: '#6A5F52', urea: '#C9C2AC', fertilizante: '#9AAFBE' };
+const NOMBRES = { maiz: 'Maíz', soja: 'Soja', trigo: 'Trigo', cebada: 'Cebada forrajera', cervecera: 'Cebada cervecera', girasol: 'Girasol', urea: 'Urea', fertilizante: 'Fertilizante', vacio: 'Vacío' };
+const GRANOS = ['maiz', 'soja', 'trigo', 'girasol', 'cebada', 'cervecera'];
+const SEMILLAS = ['soja', 'trigo', 'cebada', 'cervecera'];   /* lo que se guarda en los aéreos de semilla */
+const INSUMOS = ['urea', 'fertilizante'];
+
+const CHAPA = 0.95;          /* alto de chapa medido en planta */
+/* el copete se toma del cono superior de la planilla, no de un talud supuesto */
+
+const FAMILIAS = {
+  grande: { diam: 12.70, chapas: 13, tn: 1481.02, chapaM: CHAPA, conoSup: 139.47, conoInf: 156.38 },
+  media:  { diam:  8.10, chapas: 11, tn:  485.00, chapaM: CHAPA, conoSup:  34.33, conoInf:  39.14 },
+  chica:  { diam:  8.10, chapas:  8, tn:  370.00, chapaM: CHAPA, conoSup:  34.33, conoInf:  39.14 },
+  plano:  { diam: 16.10, chapas:  5, tn:  956.40, m3: 1195.50, conoSup: 191.08, conoInf:   0.00, coherente: true, fondoPlano: true, techoVisual: 0.55 },
+  aereo60:  { diam: 3.60, chapas: 10, tn:  60.00, m3:  80.00, conoSup: 4.50, conoInf: 10.00, aereo: true, aOjo: true, patas: 5.0 },
+  aereo100: { diam: 4.30, chapas: 10, tn: 100.00, m3: 133.00, conoSup: 6.50, conoInf: 15.00, aereo: true, aOjo: true, patas: 5.0 },
+  /* La Virgen — radio² de la planilla: 49,00 / 16,08 / 11,42 m² → diámetros 14,00 / 8,02 / 6,76 m */
+  v1000:  { diam: 14.00, chapas: 7, tn: 1000.00, chapaM: CHAPA, conoSup: 172.41, conoInf: 215.51, chapasPendientes: true },
+  v310:   { diam:  8.02, chapas: 7, tn:  310.00, chapaM: CHAPA, conoSup:  32.33, conoInf:  40.41, chapasPendientes: true },
+  v210:   { diam:  6.76, chapas: 7, tn:  210.00, chapaM: CHAPA, conoSup:  19.38, conoInf:  24.16, chapasPendientes: true },
+  aereo120: { diam: 5.60, chapas: 10, tn: 120.00, m3: 160.00, conoSup: 11.00, conoInf: 13.79, aereo: true, aOjo: true, patas: 5.0 }
+};
+
+/* Aéreos de Mónaco: cada uno con su propia familia, así se pueden editar de a uno desde Configuración.
+   Numeración como se usa en planta (septiembre 2026). AF = fertilizante, AU = urea. */
+const AEREOS_MONACO = { A1: 'aereo100', A2: 'aereo100', A3: 'aereo60', A4: 'aereo60', A5: 'aereo100',
+                        A6: 'aereo100', A7: 'aereo100', AF: 'aereo60', AU: 'aereo60' };
+Object.entries(AEREOS_MONACO).forEach(([id, base]) => { FAMILIAS['aer_' + id] = { ...FAMILIAS[base] }; });
+
+function derivarFamilia(f) {
+  f.area = Math.PI * (f.diam / 2) ** 2;
+  if (f.chapaM) {                       /* geometría verificada: sale del alto de chapa */
+    f.altoCil = f.chapas * f.chapaM;
+    f.m3Cilindro = f.area * f.altoCil;
+    f.m3 = f.m3Cilindro + f.conoSup + f.conoInf;
+  } else {                              /* estimados: salen del m³ que se supone */
+    f.altoCil = (f.m3 - f.conoSup - f.conoInf) / f.area;
+    f.m3Cilindro = f.m3 - f.conoSup - f.conoInf;
+  }
+  f.altoChapa = f.altoCil / f.chapas;
+  f.altoConoInf = f.conoInf > 0 ? (3 * f.conoInf) / f.area : 0;
+  f.altoConoSup = (3 * f.conoSup) / f.area;
+  f.m3PorChapa = f.m3Cilindro / f.chapas;
+  f.densidadNominal = f.tn / f.m3;      /* a cuánto está calculada la capacidad de chapa */
+  f.m3Copete = f.conoSup;
+  f.altoCopete = f.altoConoSup;
+  f.taludCopete = Math.atan(f.altoCopete / (f.diam / 2)) * 180 / Math.PI;
+  /* solo para el dibujo: techoVisual achica el cono de arriba (el silo 9 lo tiene más bajo de lo normal).
+     Los m³ del copete no cambian: siguen siendo los de la planilla. */
+  f.altoTechoDib = f.altoConoSup * (f.techoVisual || 1);
+  f.altoCopeteDib = f.altoCopete * (f.techoVisual || 1);
+}
+Object.values(FAMILIAS).forEach(derivarFamilia);
+
+/* volumen ocupado: cono de fondo + chapas + el copete de arriba, si lo hay */
+function volumenSilo(f, d) {
+  if (d.chapas <= 0) return 0;
+  const vol = f.conoInf + (d.chapas / f.chapas) * f.m3Cilindro + (d.copete || 0) * f.m3Copete;
+  return Math.max(vol, 0);
+}
+
+/* Tubos de gas: 3 tanques Lapesa de propano, 6,43 m³ de capacidad de agua cada uno (según chapa).
+   El reloj marca el % de líquido sobre esa capacidad. */
+const TUBOS_GAS = {
+  T1: { litros: 6430, serie: 'LP 974343' },
+  T2: { litros: 6430, serie: 'LP 95120'  },
+  T3: { litros: 6430, serie: 'LP 962338' }
+};
+let DENSIDAD_GAS = 0.51;   // kg por litro de propano líquido (aproximado, confirmar con YPF Gas)
+const KG_GAS_POR_TN_PUNTO = 0.55;  // consumo estimado por tonelada y punto de humedad
+
+/* ============================================================
+   CONEXIÓN CON LA SHEET (Control Secado y Cubicaje)
+   ============================================================ */
+const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwzkjj0ZWhZsZNiYBiq5A2gU8bV0nhc2Ou16wql0sTC0UhJD5UCv4eV4ykSjXSGJ0sj/exec";
+/* humedad máxima para cargar a puerto (% de la Norma de comercialización). Los cereales que no estén en la
+   lista (por ejemplo uno agregado desde Configuración) usan el valor por defecto. Las claves cubren tanto el
+   código interno como el nombre con que se guarda en la Sheet ("Cebada forrajera", "Cebada cervecera"). */
+const TOLERANCIA_POR_CEREAL = {
+  maiz: 14.5, soja: 13.5, trigo: 14, girasol: 11,
+  cebada: 14, cebadaforrajera: 14, cervecera: 14, cebadacervecera: 14
+};
+const TOLERANCIA_DEFECTO = 14.5;
+function toleranciaPuerto(cereal) {
+  const clave = String(cereal || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '');
+  return TOLERANCIA_POR_CEREAL[clave] !== undefined ? TOLERANCIA_POR_CEREAL[clave] : TOLERANCIA_DEFECTO;
+}
+/* ¿quedó lista para puerto? Se recalcula con el cereal y la humedad de salida, así corrige también
+   las pasadas viejas que se guardaron con la tolerancia única de 14,5. Si falta la humedad, vale lo guardado. */
+function listaParaPuerto(p) {
+  const hum = parseFloat(String(p.HumedadSalida).replace(',', '.'));
+  if (isFinite(hum) && p.Cereal) return hum <= toleranciaPuerto(p.Cereal) + 1e-9;
+  return p.DisponiblePuerto === 'SI';
+}
+const SILOS_CIRCUITO = [1, 3, 5, 6]; // los únicos que se sincronizan con PasadasSecado/Cubicaje
+
+let cubicajeRemoto = null; // se llena con el fetch inicial a la Sheet
+
+/* ---- clave de acceso: no está escrita en este archivo, se pide una vez por equipo ---- */
+const LS_CLAVE = 'claveAcceso';
+let claveApp = '';
+try { claveApp = localStorage.getItem(LS_CLAVE) || ''; } catch (e) {}
+let esperandoClave = null;
+
+function olvidarClave() { claveApp = ''; try { localStorage.removeItem(LS_CLAVE); } catch (e) {} }
+const claveRechazada = d => !!d && d.ok === false && d.error === 'clave';
+
+/* muestra el cartel y devuelve true si ingresaron una clave, false si eligieron seguir sin conexión */
+function pedirClave(aviso) {
+  if (esperandoClave) return esperandoClave;
+  esperandoClave = new Promise(resolve => {
+    const m = document.getElementById('modalClave'), inp = document.getElementById('claveInput');
+    document.getElementById('claveAviso').textContent = aviso || '';
+    inp.value = '';
+    m.classList.add('abierto');
+    setTimeout(() => inp.focus(), 50);
+    const cerrar = ok => { m.classList.remove('abierto'); esperandoClave = null; resolve(ok); };
+    document.getElementById('claveOk').onclick = () => {
+      const v = inp.value.trim();
+      if (!v) { document.getElementById('claveAviso').textContent = 'Escribí la clave.'; return; }
+      claveApp = v;
+      try { localStorage.setItem(LS_CLAVE, v); } catch (e) {}
+      cerrar(true);
+    };
+    inp.onkeydown = e => { if (e.key === 'Enter') document.getElementById('claveOk').click(); };
+    document.getElementById('claveSin').onclick = () => cerrar(false);
+  });
+  return esperandoClave;
+}
+
+async function fetchSheet(intento = 0) {
+  if (WEBAPP_URL.startsWith('PEGAR_ACA')) return null;
+  if (!claveApp && !(await pedirClave())) return null;
+  try {
+    const res = await fetch(WEBAPP_URL + '?clave=' + encodeURIComponent(claveApp));
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (claveRechazada(data)) {
+      olvidarClave();
+      if (intento < 5 && await pedirClave('La clave no es correcta. Probá de nuevo.')) return fetchSheet(intento + 1);
+      return null;
+    }
+    return data;
+  } catch (err) {
+    console.warn('Sin conexión con la Sheet, se usan los datos de ejemplo del archivo.', err);
+    return null;
+  }
+}
+
+async function postSheet(sheet, action, row, key, intento = 0) {
+  if (WEBAPP_URL.startsWith('PEGAR_ACA')) return null;
+  if (!claveApp && !(await pedirClave())) return null;
+  try {
+    const res = await fetch(WEBAPP_URL, {
+      method: 'POST',
+      body: JSON.stringify({ clave: claveApp, sheet, action, row, key }),
+      headers: { 'Content-Type': 'text/plain' } // evita el preflight de Apps Script
+    });
+    const data = await res.json();
+    if (claveRechazada(data)) {
+      olvidarClave();
+      if (intento < 1 && await pedirClave('La clave no es correcta. Probá de nuevo.')) return postSheet(sheet, action, row, key, intento + 1);
+      return data;
+    }
+    return data;
+  } catch (err) {
+    console.error('No se pudo escribir en la Sheet', err);
+    return null;
+  }
+}
+
+/* aplica el estado guardado en la pestaña Cubicaje a los silos del circuito de secado */
+function aplicarCubicajeRemoto(datosPlanta) {
+  if (!cubicajeRemoto || !cubicajeRemoto.Cubicaje) return;
+  cubicajeRemoto.Cubicaje.forEach(fila => {
+    const s = datosPlanta.silos.find(x => String(x.id) === String(fila.SiloID));
+    if (!s) return;
+    if (fila.Cereal) s.cereal = String(fila.Cereal).toLowerCase();
+    if (s.semilla) s.variedad = fila.Notas ? String(fila.Notas) : '';
+    if (fila.Chapas !== undefined && fila.Chapas !== '') {
+      s.chapas = Number(fila.Chapas);
+      if (s.mezcla) { s.mezcla.repaso = 0; s.mezcla.nuevo = s.chapas; }
+    }
+  });
+}
+
+/* aplica la geometría guardada en la pestaña DatosSilos (Configuración) a las familias de Mónaco */
+function aplicarGeometria(f, row) {
+  if (f.aereo) {
+    const m3PorTn = f.m3 / f.tn;                    /* conserva la relación volumen/capacidad del aéreo */
+    if (row.CapacidadNominal_T) f.tn = Number(row.CapacidadNominal_T);
+    f.m3 = f.tn * m3PorTn;
+  } else {
+    if (row.CantChapas) f.chapas = Number(row.CantChapas);
+    if (row.CapacidadNominal_T) f.tn = Number(row.CapacidadNominal_T);
+  }
+  if (row.Diametro_m) f.diam = Number(row.Diametro_m);
+  if (row.ConoInferior_m3 !== undefined && row.ConoInferior_m3 !== '') f.conoInf = Number(row.ConoInferior_m3);
+  if (row.ConoSuperior_m3 !== undefined && row.ConoSuperior_m3 !== '') f.conoSup = Number(row.ConoSuperior_m3);
+  derivarFamilia(f);
+}
+
+function aplicarDatosSilosRemoto() {
+  if (!cubicajeRemoto || !cubicajeRemoto.DatosSilos) return;
+  cubicajeRemoto.DatosSilos.forEach(row => {
+    const id = String(row.SiloID);
+    let clave = AEREOS_MONACO[id] ? 'aer_' + id : FAMILIA_LABEL_A_KEY[row.Familia];
+    if (clave && FAMILIAS[clave]) aplicarGeometria(FAMILIAS[clave], row);
+  });
+}
+
+/* vuelve a dibujar la planta con el estado actual (después de cambiar medidas) */
+function rearmarEscena() {
+  const sel = seleccion ? seleccion.dato.id : null;
+  limpiar();
+  datos.silos.forEach(armarSilo);
+  datos.tubos.forEach(armarTubo);
+  datos.bolsas.forEach(armarBolsa);
+  datos.obras.forEach(armarObra);
+  armarCircuito(datos.circuito);
+  seleccionar(sel);
+}
+
+/* sube a la Sheet el estado actual de los silos indicados */
+function sincronizarCubicaje(ids) {
+  if (planta !== 'monaco' || !datos || !ids || !ids.length) return;
+  ids.forEach(id => {
+    const it = porId(id);
+    if (!it) return;
+    const d = it.dato, f = it.fam;
+    const vol = volumenSilo(f, d);
+    const tn = vol * (DENSIDAD[d.cereal] || 0.7);
+    postSheet('Cubicaje', 'upsert', {
+      SiloID: id, Cereal: d.cereal.charAt(0).toUpperCase() + d.cereal.slice(1),
+      Sentido: d.copete === 1 ? 'copete arriba' : d.copete === -1 ? 'copete abajo' : 'enrasado',
+      Chapas: d.chapas, Toneladas: +tn.toFixed(2),
+      UltimaActualizacion: new Date().toISOString(), Notas: d.semilla ? (d.variedad || '') : ''
+    }, 'SiloID');
+  });
+}
+
+
+const PLANTAS = {
+  monaco: {
+    titulo: 'Planta Mónaco',
+    bajada: 'Disposición según el plano de planta. Niveles por chapa.',
+    camara: { radio: 195, azim: -0.40, polar: 0.97, foco: [-4, 5, 50] },
+    circuito: { previos: [3, 1], previo: 3, maiz: 5, soja: 6, secadora: { x: 24, z: 28 } },
+    silos: [
+      /* fila de arriba */
+      { id: 13, fam: 'grande', x: -14, z:  0, cereal: 'soja',  chapas: 11 },
+      { id: 14, fam: 'grande', x:   2, z:  0, cereal: 'maiz',  chapas: 13, copete:  1 },
+      { id: 15, fam: 'grande', x:  18, z:  0, cereal: 'girasol', chapas: 9 },
+      /* batería chica: impares arriba, pares abajo, del plano hacia la secadora */
+      { id:  7, fam: 'chica',  x: -20, z: 22, cereal: 'trigo', chapas:  5 },
+      { id:  5, fam: 'media',  x:  -9, z: 22, cereal: 'maiz',  chapas:  2, rol: 'enfriado' },
+      { id:  3, fam: 'media',  x:   2, z: 22, cereal: 'maiz',  chapas:  0, rol: 'previo', mezcla: { repaso: 0, nuevo: 0 } },
+      { id:  1, fam: 'chica',  x:  13, z: 22, cereal: 'maiz',  chapas:  1, rol: 'previo', mezcla: { repaso: 0, nuevo: 1 } },
+      { id:  8, fam: 'chica',  x: -20, z: 33, cereal: 'cebada',chapas:  6 },
+      { id:  6, fam: 'media',  x:  -9, z: 33, cereal: 'soja',  chapas:  4, rol: 'enfriado' },
+      { id:  4, fam: 'media',  x:   2, z: 33, cereal: 'cervecera', chapas: 7 },
+      { id:  2, fam: 'chica',  x:  13, z: 33, cereal: 'vacio', chapas:  0 },
+      /* fila de abajo, del lado de la balanza */
+      { id: 12, fam: 'grande', x: -20, z: 58, cereal: 'soja',  chapas:  8 },
+      { id: 11, fam: 'grande', x:  -4, z: 58, cereal: 'trigo', chapas: 12, copete: -1 },
+      { id: 10, fam: 'grande', x:  12, z: 58, cereal: 'vacio', chapas:  0 },
+      /* silo 9: el plano, fondo sin cono */
+      { id:  9, nombre: 'Silo 9 · plano', fam: 'plano', x: -44, z: 26, cereal: 'soja', chapas: 3 },
+      /* aéreos pegados al silo plano */
+      { id: 'A7', fam: 'aer_A7', semilla: true, x: -43, z: 13, cereal: 'trigo', chapas: 6 },
+      { id: 'A6', fam: 'aer_A6', semilla: true, x: -55, z: 23, cereal: 'vacio', chapas: 0 },
+      { id: 'A5', fam: 'aer_A5', semilla: true, x: -54, z: 37, cereal: 'cebada',chapas: 3 },
+      /* aéreos a la derecha de la oficina */
+      { id: 'A1', fam: 'aer_A1', semilla: true, x:  -8, z: 90, cereal: 'vacio', chapas: 0 },
+      { id: 'A2', fam: 'aer_A2', semilla: true, x:  -8, z: 98, cereal: 'soja',  chapas: 7 },
+      /* aéreos del borde derecho, entre el silo 10 y los tubos de gas */
+      { id: 'AF', nombre: 'Aéreo Fertilizante', fam: 'aer_AF', x:  24, z: 76, cereal: 'fertilizante', chapas: 8 },
+      { id: 'AU', nombre: 'Aéreo Urea',         fam: 'aer_AU', x:  24, z: 83, cereal: 'urea',         chapas: 5 },
+      { id: 'A4', fam: 'aer_A4', semilla: true, x:  24, z: 90, cereal: 'vacio', chapas: 0 },
+      { id: 'A3', fam: 'aer_A3', semilla: true, x:  24, z: 97, cereal: 'soja',  chapas: 4 }
+    ],
+    tubos: [
+      { id: 'T1', x: 14, z: 112, dir: 'z', nivel: 30, consumido: 0 },
+      { id: 'T2', x: 19, z: 112, dir: 'z', nivel: 55, consumido: 0 },
+      { id: 'T3', x: 24, z: 112, dir: 'z', nivel: 83, consumido: 0 }
+    ],
+    bolsas: [],
+    obras: [
+      { tipo: 'secadora', x: 24, z: 28 },
+      { tipo: 'zaranda',  x: -30, z: 27 },
+      { tipo: 'rejilla',  x:   0, z: 44 },
+      { tipo: 'galpon',   x: -46, z:  0, ancho: 28, largo: 13, alto: 6.5, rotulo: 'Galpón agroquímicos' },
+      { tipo: 'balanza',  x: -48, z: 70 },
+      { tipo: 'edificio', x: -36, z: 95, ancho: 38, largo: 22, alto: 4.5, rotulo: 'Oficinas' }
+    ]
+  },
+  virgen: {
+    titulo: 'Planta La Virgen',
+    bajada: 'Según tu plano sobre la foto satelital — posiciones aproximadas, a ajustar.',
+    camara: { radio: 210, azim: -0.30, polar: 0.95, foco: [0, 4, -6] },
+    circuito: null,
+    silos: [
+      /* numeración del Excel de cubicaje; niveles de ejemplo tomados de la misma planilla */
+      { id: 7, nombre: 'Silo 7 · en reparación', fam: 'v1000', x:   0, z: -12, cereal: 'vacio', chapas: 0 },
+      { id: 2, fam: 'v210',  x:   6, z:  -3, cereal: 'cebada', chapas: 5 },
+      { id: 3, fam: 'v210',  x:  -8, z:  -4, cereal: 'trigo',  chapas: 4 },
+      { id: 4, fam: 'v210',  x:  12, z:   3, cereal: 'cebada', chapas: 5.5 },
+      { id: 5, fam: 'v210',  x: -13, z:   2, cereal: 'cebada', chapas: 6.5 },
+      { id: 1, fam: 'v310',  x:  12, z:  13, cereal: 'cebada', chapas: 4 },
+      { id: 6, fam: 'v310',  x: -13, z:  12, cereal: 'soja',   chapas: 3.5 },
+      { id: 'A1', fam: 'aereo120', x: 20, z:  32, cereal: 'vacio', chapas: 0 }
+    ],
+    tubos: [],
+    /* dos baterías de bolsas: "fondo" = la de arriba, cerca de Av. Campos / ruta 227 (diagonal);
+       "playon" = la de abajo, más horizontal, pegada al monte de plantas */
+    playones: [
+      { id: 'fondo',  nombre: 'Batería norte', x:  20, z: -55, rot: -0.75, paso:  5.2 },
+      { id: 'playon', nombre: 'Batería sur',    x: -15, z:  32, rot:  0.25, paso: -5.2 }
+    ],
+    bolsas: [
+      { id: 'S1',  playon: 'fondo',  largo: 60, cereal: 'soja',   metros: 60 },
+      { id: 'S2',  playon: 'fondo',  largo: 60, cereal: 'soja',   metros: 47 },
+      { id: 'S3',  playon: 'fondo',  largo: 60, cereal: 'maiz',   metros: 60 },
+      { id: 'S4',  playon: 'fondo',  largo: 66, cereal: 'maiz',   metros: 22 },
+      { id: 'S5',  playon: 'fondo',  largo: 66, cereal: 'vacio',  metros:  0 },
+      { id: 'S6',  playon: 'playon', largo: 75, cereal: 'maiz',   metros: 75 },
+      { id: 'S7',  playon: 'playon', largo: 75, cereal: 'maiz',   metros: 75 },
+      { id: 'S8',  playon: 'playon', largo: 75, cereal: 'soja',   metros: 55 },
+      { id: 'S9',  playon: 'playon', largo: 75, cereal: 'soja',   metros: 75 },
+      { id: 'S10', playon: 'playon', largo: 66, cereal: 'trigo',  metros: 31 },
+      { id: 'S11', playon: 'playon', largo: 66, cereal: 'girasol',metros: 66 },
+      { id: 'S12', playon: 'playon', largo: 60, cereal: 'vacio',  metros:  0 },
+      { id: 'S13', playon: 'playon', largo: 60, cereal: 'vacio',  metros:  0 }
+    ],
+    obras: [
+      { tipo: 'galpon',  x:  -1, z:  29, ancho: 16, largo: 8, alto: 6.0, rotulo: 'Galpón' },
+      { tipo: 'rejilla', x:   0, z:  21, sinVolcadora: true },
+      { tipo: 'edificio', x:  55, z:   1, ancho: 10, largo: 18, alto: 4.0, rotulo: 'Oficina' },
+      { tipo: 'balanza', x:  65, z:   1, rot: 1.5708 }
+    ]
+  }
+};
+
+const BOLSA = { diam: 2.74, tnPorMetro: { maiz: 3.4, soja: 3.3, trigo: 3.5, cebada: 2.9, cervecera: 2.9, girasol: 1.9, vacio: 0 } };
+const ROLES = {
+  previo:   { texto: 'Paso previo a la secadora',  firme: true },
+  enfriado: { texto: 'Enfriado después de secar',  firme: true }
+};
+
+/* ============================================================
+   ESCENA
+   ============================================================ */
+
+const escena = new THREE.Scene();
+escena.background = new THREE.Color(0xD6DBDB);
+escena.fog = new THREE.Fog(0xD6DBDB, 115, 300);
+
+const camara = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.5, 700);
+const render = new THREE.WebGLRenderer({ antialias: true });
+render.setPixelRatio(Math.min(devicePixelRatio, 2));
+render.setSize(innerWidth, innerHeight);
+render.shadowMap.enabled = true;
+render.shadowMap.type = THREE.PCFSoftShadowMap;
+document.getElementById('escena').appendChild(render.domElement);
+
+escena.add(new THREE.HemisphereLight(0xF2F5F5, 0x9A8E78, 0.9));
+const sol = new THREE.DirectionalLight(0xFFF6E4, 0.7);
+sol.position.set(-60, 90, 40);
+sol.castShadow = true;
+sol.shadow.mapSize.set(2048, 2048);
+Object.assign(sol.shadow.camera, { left: -110, right: 110, top: 110, bottom: -110, far: 300 });
+escena.add(sol);
+
+const piso = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshLambertMaterial({ color: 0xC4B49A }));
+piso.rotation.x = -Math.PI / 2;
+piso.receiveShadow = true;
+escena.add(piso);
+
+function texturaChapa(n) {
+  const c = document.createElement('canvas');
+  c.width = 8; c.height = 512;
+  const g = c.getContext('2d');
+  g.fillStyle = '#B9C0C1'; g.fillRect(0, 0, 8, 512);
+  g.strokeStyle = '#7E8A8C'; g.lineWidth = 2;
+  for (let i = 1; i < n; i++) {
+    const y = Math.round(i * 512 / n);
+    g.beginPath(); g.moveTo(0, y); g.lineTo(8, y); g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = THREE.RepeatWrapping; t.repeat.set(22, 1);
+  return t;
+}
+
+function etiqueta(texto, chico) {
+  const alto = 128, pad = 34, cuerpo = 52, medidor = document.createElement('canvas').getContext('2d');
+  const fuente = `600 ${cuerpo}px Helvetica, Arial, sans-serif`;
+  medidor.font = fuente;
+  const c = document.createElement('canvas');
+  c.width = Math.ceil(medidor.measureText(texto).width) + pad * 2;
+  c.height = alto;
+  const g = c.getContext('2d');
+  const h = 88, y = (alto - h) / 2;
+  g.fillStyle = 'rgba(30,38,40,0.9)';
+  if (g.roundRect) { g.beginPath(); g.roundRect(0, y, c.width, h, h / 2); g.fill(); }
+  else g.fillRect(0, y, c.width, h);
+  g.fillStyle = '#fff';
+  g.font = fuente;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(texto, c.width / 2, alto / 2 + 2);
+  const tex = new THREE.CanvasTexture(c);
+  tex.minFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  const e = chico ? 3.6 : 5.0;                 /* alto del cartel, en metros */
+  sp.scale.set(e * c.width / alto, e, 1);
+  return sp;
+}
+
+/* ============================================================
+   ARMADO
+   ============================================================ */
+
+let mundo = new THREE.Group();
+let items = [], clicables = [], circuitoGrupo = null, enCircuito = new Set();
+let planta = 'monaco', datos = null;
+
+function limpiar() {
+  escena.remove(mundo);
+  mundo.traverse(o => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { if (m.map) m.map.dispose(); m.dispose(); });
+  });
+  mundo = new THREE.Group(); escena.add(mundo);
+  items = []; clicables = []; circuitoGrupo = null; enCircuito = new Set();
+}
+
+function armarSilo(s) {
+  const f = FAMILIAS[s.fam], r = f.diam / 2;
+  const g = new THREE.Group();
+  g.position.set(s.x, 0, s.z);
+  const yCono = f.altoConoInf > 0 ? (f.patas || 1.1) : 0;
+  const yBase = yCono + f.altoConoInf;
+
+  if (f.altoConoInf > 0) {
+    const tolva = new THREE.Mesh(
+      new THREE.ConeGeometry(r, f.altoConoInf, 32, 1, true),
+      new THREE.MeshLambertMaterial({ color: 0x8F999B, transparent: true, opacity: 0.4, side: THREE.DoubleSide }));
+    tolva.position.y = yCono + f.altoConoInf / 2; tolva.rotation.x = Math.PI;
+    g.add(tolva);
+    for (let i = 0; i < 4; i++) {
+      const a = i * Math.PI / 2 + 0.78;
+      const p = new THREE.Mesh(new THREE.BoxGeometry(0.22, yBase, 0.22), new THREE.MeshLambertMaterial({ color: 0x6E797B }));
+      p.position.set(Math.cos(a) * r * 0.92, yBase / 2, Math.sin(a) * r * 0.92);
+      g.add(p);
+    }
+  }
+
+  const paredMat = new THREE.MeshLambertMaterial({ map: texturaChapa(f.chapas), transparent: true, opacity: 0.42, side: THREE.DoubleSide });
+  const pared = new THREE.Mesh(new THREE.CylinderGeometry(r, r, f.altoCil, 32, 1, true), paredMat);
+  pared.position.y = yBase + f.altoCil / 2;
+  pared.castShadow = true;
+  pared.userData.ref = s.id;
+  g.add(pared); clicables.push(pared);
+
+  const techo = new THREE.Mesh(new THREE.ConeGeometry(r * 1.04, f.altoTechoDib, 32),
+    new THREE.MeshLambertMaterial({ color: 0x9BA5A7, transparent: true, opacity: 0.55 }));
+  techo.position.y = yBase + f.altoCil + f.altoTechoDib / 2;
+  techo.castShadow = true;
+  g.add(techo);
+
+  const matCono = new THREE.MeshLambertMaterial({ color: COLORES[s.cereal] });
+  const granoCono = new THREE.Mesh(new THREE.ConeGeometry(r * 0.97, Math.max(f.altoConoInf, 0.01), 32), matCono);
+  granoCono.rotation.x = Math.PI;
+  granoCono.position.y = yCono + f.altoConoInf / 2;
+  g.add(granoCono);
+
+  /* dos bandas: abajo el repaso, arriba lo nuevo */
+  const granoBajo = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.97, r * 0.97, 1, 32),
+    new THREE.MeshLambertMaterial({ color: COLORES[s.cereal] }));
+  const granoAlto = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.97, r * 0.97, 1, 32),
+    new THREE.MeshLambertMaterial({ color: COLORES[s.cereal] }));
+  granoBajo.castShadow = granoAlto.castShadow = true;
+  g.add(granoBajo, granoAlto);
+
+  /* copete: cono de carga hacia arriba o embudo de extracción hacia abajo */
+  const granoCopete = new THREE.Mesh(new THREE.ConeGeometry(r * 0.97, f.altoCopeteDib, 32),
+    new THREE.MeshLambertMaterial({ color: COLORES[s.cereal] }));
+  granoCopete.castShadow = true;
+  g.add(granoCopete);
+
+  const num = etiqueta(String(s.etq || s.id), String(s.etq || s.id).length > 2 || r < 3);
+  num.position.y = yBase + f.altoCil + f.altoTechoDib + 2.5;
+  g.add(num);
+
+  mundo.add(g);
+  const it = { tipo: 'silo', dato: s, fam: f, grupo: g, paredMat, techo, granoCono, granoBajo, granoAlto, granoCopete, num, yBase, visual: s.chapas };
+  items.push(it);
+  refrescarSilo(it, true);
+}
+
+function refrescarSilo(it, instante) {
+  const { dato: d, fam: f, yBase } = it;
+  if (instante) it.visual = d.chapas;
+  const chapas = it.visual;
+  const altoTotal = Math.max(chapas / f.chapas * f.altoCil, 0);
+
+  let propRepaso = 0;
+  if (d.mezcla && d.chapas > 0) propRepaso = d.mezcla.repaso / (d.mezcla.repaso + d.mezcla.nuevo || 1);
+
+  const hBajo = Math.max(altoTotal * propRepaso, 0.0001);
+  const hAlto = Math.max(altoTotal * (1 - propRepaso), 0.0001);
+
+  it.granoBajo.scale.y = hBajo;
+  it.granoBajo.position.y = yBase + hBajo / 2;
+  it.granoBajo.visible = chapas > 0.01 && propRepaso > 0.001;
+  it.granoBajo.material.color.setHex(COLOR_REPASO[d.cereal] || COLORES[d.cereal]);
+
+  it.granoAlto.scale.y = hAlto;
+  it.granoAlto.position.y = yBase + hBajo * (propRepaso > 0.001 ? 1 : 0) + hAlto / 2;
+  it.granoAlto.visible = chapas > 0.01 && propRepaso < 0.999;
+  it.granoAlto.material.color.setHex(COLORES[d.cereal]);
+
+  it.granoCono.visible = chapas > 0.01 && f.altoConoInf > 0;
+  it.granoCono.material.color.setHex(propRepaso > 0.5 ? (COLOR_REPASO[d.cereal] || COLORES[d.cereal]) : COLORES[d.cereal]);
+
+  const cima = yBase + altoTotal, copete = d.copete || 0;
+  it.granoCopete.visible = chapas > 0.01 && copete !== 0;
+  if (copete === 1) {
+    it.granoCopete.rotation.x = 0;
+    it.granoCopete.position.y = cima + f.altoCopeteDib / 2;
+    it.granoCopete.material.color.setHex(COLORES[d.cereal]);
+  } else if (copete === -1) {
+    it.granoCopete.rotation.x = Math.PI;
+    it.granoCopete.position.y = cima - f.altoCopeteDib / 2;
+    it.granoCopete.material.color.setHex(0x5C625F);
+  }
+}
+
+function armarTubo(t) {
+  const g = new THREE.Group();
+  g.position.set(t.x, 0, t.z);
+  g.rotation.y = t.dir === 'z' ? Math.PI / 2 : 0;
+  const largo = 5.2, r = 1.05;
+  const casco = new THREE.Mesh(new THREE.CylinderGeometry(r, r, largo, 24, 1, true),
+    new THREE.MeshLambertMaterial({ color: 0xE8E4DC, transparent: true, opacity: 0.5, side: THREE.DoubleSide }));
+  casco.rotation.z = Math.PI / 2; casco.position.y = 1.5; casco.castShadow = true;
+  casco.userData.ref = t.id;
+  g.add(casco); clicables.push(casco);
+  [-1, 1].forEach(s => {
+    const tapa = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 12),
+      new THREE.MeshLambertMaterial({ color: 0xE8E4DC, transparent: true, opacity: 0.5 }));
+    tapa.position.set(s * largo / 2, 1.5, 0); tapa.scale.x = 0.55;
+    g.add(tapa);
+    const cuna = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.5, 2.2), new THREE.MeshLambertMaterial({ color: 0x8B8478 }));
+    cuna.position.set(s * 1.6, 0.75, 0); cuna.castShadow = true;
+    g.add(cuna);
+  });
+  const gas = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.88, r * 0.88, largo * 0.92, 24),
+    new THREE.MeshLambertMaterial({ color: 0xC86A4E }));
+  gas.rotation.z = Math.PI / 2;
+  g.add(gas);
+  const num = etiqueta(t.id, true);
+  num.position.y = 4.4;
+  g.add(num);
+  mundo.add(g);
+  const it = { tipo: 'tubo', dato: t, grupo: g, gas, r, num, visual: t.nivel };
+  items.push(it);
+  refrescarTubo(it, true);
+}
+
+function refrescarTubo(it, instante) {
+  if (instante) it.visual = it.dato.nivel;
+  const p = Math.max(it.visual / 100, 0.0001);
+  it.gas.scale.set(1, 1, p);
+  it.gas.position.y = 1.5 - it.r * 0.88 * (1 - p);
+  it.gas.visible = it.visual > 0.5;
+}
+
+function armarBolsa(b) {
+  const g = new THREE.Group();
+  g.position.set(b.x, 0, b.z); g.rotation.y = b.rot;
+  const r = BOLSA.diam / 2;
+  const casco = new THREE.Mesh(new THREE.CylinderGeometry(r, r, b.largo, 18, 1, true),
+    new THREE.MeshLambertMaterial({ color: 0xF2F0EA, transparent: true, opacity: 0.45, side: THREE.DoubleSide }));
+  casco.rotation.x = Math.PI / 2; casco.position.y = r; casco.castShadow = true;
+  casco.userData.ref = b.id;
+  g.add(casco); clicables.push(casco);
+  const grano = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.94, r * 0.94, 1, 18),
+    new THREE.MeshLambertMaterial({ color: COLORES[b.cereal] }));
+  grano.rotation.x = Math.PI / 2; grano.position.y = r; grano.castShadow = true;
+  g.add(grano);
+  const num = etiqueta(b.id, true);
+  num.position.set(0, r + 2.1, -b.largo / 2 + 3);
+  g.add(num);
+  mundo.add(g);
+  const it = { tipo: 'bolsa', dato: b, grupo: g, grano, visual: b.metros, num };
+  items.push(it);
+  refrescarBolsa(it, true);
+}
+
+function refrescarBolsa(it, instante) {
+  if (instante) it.visual = it.dato.metros;
+  const usado = Math.max(it.visual, 0.0001);
+  it.grano.scale.y = usado;
+  it.grano.position.z = (it.dato.largo - usado) / 2;
+  it.grano.visible = it.visual > 0.2;
+  it.grano.material.color.setHex(COLORES[it.dato.cereal]);
+}
+
+function armarObra(o) {
+  if (o.tipo === 'secadora') {
+    const g = new THREE.Group();
+    g.position.set(o.x, 0, o.z); g.rotation.y = o.rot || 0;
+    const cuerpo = new THREE.Mesh(new THREE.BoxGeometry(3.4, 13, 3.4), new THREE.MeshLambertMaterial({ color: 0x8A8074 }));
+    cuerpo.position.y = 6.5; cuerpo.castShadow = true; g.add(cuerpo);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(4.2, 1.6, 4.2), new THREE.MeshLambertMaterial({ color: 0x6E6459 }));
+    cap.position.y = 13.6; cap.castShadow = true; g.add(cap);
+    const et = etiqueta('Secadora', true);
+    et.position.y = 17;
+    g.add(et);
+    mundo.add(g);
+    secadoraMesh = cuerpo;
+    return;
+  }
+  if (o.tipo === 'zaranda') {
+    const g = new THREE.Group();
+    g.position.set(o.x, 0, o.z); g.rotation.y = o.rot || 0;
+    const patas = new THREE.Mesh(new THREE.BoxGeometry(4.4, 3, 3.4), new THREE.MeshLambertMaterial({ color: 0x7C868A }));
+    patas.position.y = 1.5; patas.castShadow = true; g.add(patas);
+    const cuerpo = new THREE.Mesh(new THREE.BoxGeometry(5.6, 3.2, 4.2), new THREE.MeshLambertMaterial({ color: 0x94847A }));
+    cuerpo.position.y = 4.6; cuerpo.castShadow = true; g.add(cuerpo);
+    const tolva = new THREE.Mesh(new THREE.ConeGeometry(2.4, 2.6, 4), new THREE.MeshLambertMaterial({ color: 0x6E797B }));
+    tolva.position.y = 7.4; tolva.rotation.y = Math.PI / 4; g.add(tolva);
+    const et = etiqueta('Zaranda de carga', true);
+    et.position.y = 10.4;
+    g.add(et);
+    mundo.add(g);
+    return;
+  }
+
+  if (o.tipo === 'rejilla') {
+    const g = new THREE.Group();
+    g.position.set(o.x, 0, o.z); g.rotation.y = o.rot || 0;
+    const foso = new THREE.Mesh(new THREE.BoxGeometry(14, 0.5, 4.6), new THREE.MeshLambertMaterial({ color: 0x4E565A }));
+    foso.position.y = 0.25; foso.receiveShadow = true; g.add(foso);
+    for (let i = -6; i <= 6; i += 1.2) {
+      const barra = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.3, 4.6), new THREE.MeshLambertMaterial({ color: 0x8F999B }));
+      barra.position.set(i, 0.62, 0); g.add(barra);
+    }
+    if (!o.sinVolcadora) {
+      const plat = new THREE.Mesh(new THREE.BoxGeometry(15, 0.6, 3.4), new THREE.MeshLambertMaterial({ color: 0x8B8478 }));
+      plat.position.set(0, 1.5, 5.2); plat.rotation.x = -0.22; plat.castShadow = true; g.add(plat);
+    }
+    const et = etiqueta(o.sinVolcadora ? 'Rejilla' : 'Rejilla y volcadora', true);
+    et.position.set(0, 4.6, 0);
+    g.add(et);
+    mundo.add(g);
+    return;
+  }
+
+  if (o.tipo === 'balanza') {
+    const g = new THREE.Group();
+    g.position.set(o.x, 0, o.z); g.rotation.y = o.rot || 0;
+    const tabla = new THREE.Mesh(new THREE.BoxGeometry(20, 0.7, 3.6), new THREE.MeshLambertMaterial({ color: 0x9BA5A7 }));
+    tabla.position.y = 0.35; tabla.receiveShadow = true; tabla.castShadow = true; g.add(tabla);
+    const marco = new THREE.Mesh(new THREE.BoxGeometry(21.4, 0.35, 5), new THREE.MeshLambertMaterial({ color: 0x6E797B }));
+    marco.position.y = 0.16; g.add(marco);
+    const casilla = new THREE.Mesh(new THREE.BoxGeometry(3, 3.2, 3), new THREE.MeshLambertMaterial({ color: 0xE3E3DE }));
+    casilla.position.set(13.2, 1.6, 0); casilla.castShadow = true; g.add(casilla);
+    const et = etiqueta('Balanza', true);
+    et.position.y = 5.4;
+    g.add(et);
+    mundo.add(g);
+    return;
+  }
+
+  const g = new THREE.Group();
+  g.position.set(o.x, 0, o.z); g.rotation.y = o.rot || 0;
+  const m = new THREE.Mesh(new THREE.BoxGeometry(o.ancho, o.alto, o.largo),
+    new THREE.MeshLambertMaterial({ color: o.tipo === 'galpon' ? 0xA9705E : 0xE3E3DE }));
+  m.position.y = o.alto / 2;
+  m.castShadow = true; m.receiveShadow = true;
+  g.add(m);
+  if (o.tipo === 'galpon') {
+    /* prisma triangular: se rota la geometría para que la cumbrera corra a lo largo */
+    const rr = o.largo / Math.sqrt(3), pendiente = 0.30;
+    const geo = new THREE.CylinderGeometry(rr, rr, o.ancho, 3, 1);
+    geo.rotateZ(Math.PI / 2);      /* el eje del prisma pasa a correr sobre X */
+    geo.rotateX(-Math.PI / 2);     /* la base queda horizontal y el vértice arriba */
+    const techo = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0x8F999B }));
+    techo.scale.y = pendiente;     /* achata el triángulo: dos aguas de verdad, no una carpa */
+    techo.position.y = o.alto + rr * 0.5 * pendiente;
+    techo.castShadow = true;
+    g.add(techo);
+  }
+  if (o.rotulo) {
+    const et = etiqueta(o.rotulo, true);
+    et.position.y = o.alto + (o.tipo === 'galpon' ? 6.0 : 2.4);
+    g.add(et);
+  }
+  mundo.add(g);
+}
+
+let secadoraMesh = null;
+
+function armarCircuito(cfg) {
+  if (!cfg) return;
+  circuitoGrupo = new THREE.Group();
+  circuitoGrupo.visible = false;
+  const pos = ref => {
+    if (ref && typeof ref === 'object') return new THREE.Vector3(ref.x, 0, ref.z);
+    const it = porId(ref); return new THREE.Vector3(it.dato.x, 0, it.dato.z);
+  };
+  const flecha = (a, b, y, color = 0x3E4F55) => {
+    const p1 = pos(a).setY(y), p2 = pos(b).setY(y);
+    const d = new THREE.Vector3().subVectors(p2, p1); const l = d.length(); d.normalize();
+    circuitoGrupo.add(new THREE.ArrowHelper(d, p1, l, color, 2.6, 1.5));
+  };
+  /* ida: de cualquiera de los previos, directo a la secadora */
+  cfg.previos.forEach((p, i) => flecha(p, cfg.secadora, 17 + i * 1.8));
+  /* salida: maíz al 5, soja al 6 */
+  flecha(cfg.secadora, cfg.maiz, 15);
+  flecha(cfg.secadora, cfg.soja, 13);
+  /* vuelta de repaso: del enfriado a un previo */
+  flecha(cfg.maiz, cfg.previos[0], 22, 0x9A7C55);
+  flecha(cfg.soja, cfg.previos[1], 23.6, 0x9A7C55);
+  mundo.add(circuitoGrupo);
+  enCircuito = new Set([...cfg.previos, cfg.maiz, cfg.soja]);
+}
+
+const porId = id => items.find(i => String(i.dato.id) === String(id));
+
+const LARGOS = [60, 66, 75];
+let largoNuevo = 60;
+
+function nuevaBolsa(playon) {
+  const usados = datos.bolsas.filter(b => b.playon === playon).length;
+  const n = datos.bolsas.reduce((a, b) => Math.max(a, +String(b.id).slice(1) || 0), 0) + 1;
+  const b = { id: 'S' + n, playon, largo: largoNuevo, cereal: 'vacio', metros: 0 };
+  ubicarBolsa(b, usados);
+  datos.bolsas.push(b);
+  armarBolsa(b);
+  const pl = datos.playones.find(p => p.id === playon);
+  anotar(`Se hace un bolsón de ${largoNuevo} m en ${pl ? pl.nombre.toLowerCase() : playon}`);
+  seleccionar(b.id);
+  pintarTodo();
+}
+
+function quitarBolsa(id, callado) {
+  const it = porId(id);
+  if (!it || it.tipo !== 'bolsa') return;
+  mundo.remove(it.grupo);
+  it.grupo.traverse(o => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { if (m.map) m.map.dispose(); m.dispose(); });
+  });
+  items = items.filter(i => i !== it);
+  clicables = clicables.filter(c => c.userData.ref !== id);
+  datos.bolsas = datos.bolsas.filter(b => b.id !== id);
+  ordenarPlayones();
+  items.forEach(i => { if (i.tipo === 'bolsa') { i.grupo.position.set(i.dato.x, 0, i.dato.z); i.grupo.rotation.y = i.dato.rot; } });
+  if (!callado) { anotar(`Se saca el bolsón ${String(id).slice(1)}`); seleccion = null; pintarTodo(); }
+}
+
+/* cada bolsón se apoya al lado del anterior, corrido en perpendicular al playón */
+function ubicarBolsa(b, orden) {
+  const pl = (datos.playones || []).find(p => p.id === b.playon);
+  if (!pl) return b;
+  b.rot = pl.rot;
+  b.x = pl.x + Math.cos(pl.rot) * pl.paso * orden;
+  b.z = pl.z - Math.sin(pl.rot) * pl.paso * orden;
+  return b;
+}
+
+function ordenarPlayones() {
+  (datos.playones || []).forEach(pl => {
+    datos.bolsas.filter(b => b.playon === pl.id).forEach((b, i) => ubicarBolsa(b, i));
+  });
+}
+
+/* prende/apaga los controles según la pestaña activa (Cubicaje/Secado) — se llama al cargar la planta y al cambiar de pestaña */
+function aplicarVisibilidadModulo() {
+  const esSecado = datos.circuito && moduloActual === 'secado';
+  document.getElementById('grupoOperar').style.display = esSecado ? '' : 'none';
+  document.getElementById('grupoPrevio').style.display = esSecado ? '' : 'none';
+  document.getElementById('grupoSecadoDatos').style.display = esSecado ? '' : 'none';
+  document.getElementById('grupoInformeCubicaje').style.display = moduloActual === 'cubicaje' ? '' : 'none';
+  document.getElementById('grupoInformeSecado').style.display = moduloActual === 'secado' ? '' : 'none';
+}
+
+function cargarPlanta(clave) {
+  planta = clave;
+  datos = JSON.parse(JSON.stringify(PLANTAS[clave]));
+  if (clave === 'monaco') { aplicarCubicajeRemoto(datos); aplicarLecturasATubos(datos); }
+  ordenarPlayones();
+  limpiar();
+  datos.silos.forEach(armarSilo);
+  datos.tubos.forEach(armarTubo);
+  datos.bolsas.forEach(armarBolsa);
+  datos.obras.forEach(armarObra);
+  armarCircuito(datos.circuito);
+  document.getElementById('titulo').textContent = datos.titulo;
+  document.getElementById('bajada').textContent = datos.bajada;
+  document.getElementById('btnMonaco').setAttribute('aria-pressed', String(clave === 'monaco'));
+  document.getElementById('btnVirgen').setAttribute('aria-pressed', String(clave === 'virgen'));
+  aplicarVisibilidadModulo();
+  const hayPlayones = (datos.playones || []).length > 0;
+  document.getElementById('grupoBolsas').style.display = hayPlayones ? '' : 'none';
+  document.getElementById('destinos').innerHTML = hayPlayones
+    ? datos.playones.map(p => `<button data-playon="${p.id}">+ ${p.nombre}</button>`).join('')
+    : '';
+  document.querySelectorAll('#destinos [data-playon]').forEach(b =>
+    b.onclick = () => nuevaBolsa(b.dataset.playon));
+  document.getElementById('opCircuito').style.display = datos.circuito ? '' : 'none';
+  document.getElementById('opCircuito').setAttribute('aria-pressed', 'false');
+  if (datos.circuito) marcarPrevio(datos.circuito.previo);
+  document.getElementById('grupoDemo').style.display = datos.circuito ? '' : 'none';
+  document.getElementById('kpis').style.display = datos.circuito ? '' : 'none';
+  const c = datos.camara;
+  foco.set(...c.foco); radio = c.radio; azim = c.azim; polar = c.polar;
+  ubicarCamara();
+  seleccion = null;
+  movimientos = []; bitacora = [];
+  pintarTodo();
+}
+
+/* ============================================================
+   OPERACIÓN
+   ============================================================ */
+
+let movimientos = [], bitacora = [], chapasPaso = 3, reloj = 8 * 60;
+
+const $ = id => document.getElementById(id);
+const num = (n, d = 0) => n.toLocaleString('es-AR', { minimumFractionDigits: d, maximumFractionDigits: d });
+const nombreCereal = c => NOMBRES[c] || c.charAt(0).toUpperCase() + c.slice(1);
+const nombreUnidad = (d, f) => d.nombre || (f.aereo ? `Aéreo ${String(d.id).slice(1)}` : `Silo ${d.id}`);
+
+function tnDeChapas(fam, chapas, cereal) { return chapas * fam.m3PorChapa * (DENSIDAD[cereal] || 0.7); }
+
+/* toneladas de una pasada: suma el cono entero (según sentido) apenas hay chapas,
+   igual que volumenSilo() para el resto de la app — antes esta cuenta no lo hacía */
+function tnPasada(fam, chapas, cereal, sentido) {
+  if (chapas <= 0) return 0;
+  const cono = sentido === 'abajo' ? fam.conoSup : fam.conoInf;
+  const vol = cono + chapas * fam.m3PorChapa;
+  return vol * (DENSIDAD[cereal] || 0.7);
+}
+
+/* toneladas reales de sacarle "chapasDelta" chapas a un silo: compara su cubicaje real
+   (el mismo volumenSilo del módulo de Cubicaje, que sí toma cono Y copete) antes y después.
+   Así el copete solo se cuenta una vez, y se le acredita a la pasada que efectivamente lo saca. */
+function estimarTn(it, chapasDelta, cerealElegido) {
+  if (!it) return 0;
+  const cereal = cerealElegido || it.dato.cereal;
+  const antes = volumenSilo(it.fam, it.dato);
+  const despuesChapas = Math.max(0, it.dato.chapas - chapasDelta);
+  const despues = volumenSilo(it.fam, { chapas: despuesChapas, copete: it.dato.copete });
+  return Math.max(0, antes - despues) * (DENSIDAD[cereal] || 0.7);
+}
+
+function hora() {
+  const h = String(Math.floor(reloj / 60)).padStart(2, '0');
+  const m = String(reloj % 60).padStart(2, '0');
+  return `${h}:${m}`;
+}
+function avanzar(min) { reloj = (reloj + min) % 1440; }
+
+function anotar(texto) {
+  bitacora.unshift({ hora: hora(), texto });
+  bitacora = bitacora.slice(0, 6);
+}
+
+/* entra mercadería húmeda a uno de los silos previos */
+function opIngreso(chapas, cereal = 'maiz') {
+  const it = porId(datos.circuito.previo);
+  const d = it.dato;
+  const libre = it.fam.chapas - d.chapas;
+  chapas = Math.min(chapas, libre);
+  if (chapas <= 0) { anotar(`El silo previo ${it.dato.id} está lleno`); pintarTodo(); return; }
+  d.cereal = cereal;
+  d.mezcla.nuevo += chapas;
+  d.chapas += chapas;
+  avanzar(25);
+  anotar(`Entran ${chapas} chapas de ${nombreCereal(cereal).toLowerCase()} al silo ${d.id}`);
+  pintarTodo();
+}
+
+/* sale hacia la secadora y va al silo de enfriado según el cereal */
+function opSecar(chapas, humEntrada = 18.2, humSalida = 15.6, sentido = 'arriba', pasada = 1, fecha = null, cerealElegido = null) {
+  const org = porId(datos.circuito.previo);
+  const d = org.dato;
+  chapas = Math.min(chapas, d.chapas);
+  if (chapas <= 0) { anotar(`No hay mercadería en el silo previo ${d.id}`); pintarTodo(); return; }
+
+  const cereal = cerealElegido || d.cereal; // el cereal que se usa para calcular y registrar esta pasada
+
+  const total = d.mezcla.repaso + d.mezcla.nuevo || 1;
+  const propRepaso = d.mezcla.repaso / total;
+  const chRepaso = chapas * propRepaso;
+  const chNuevo = chapas - chRepaso;
+
+  // tn de la pasada: compara el cubicaje real del previo antes/después de sacarle "chapas"
+  // (misma fórmula que Cubicaje, toma cono y copete si corresponde) — se calcula ANTES de mutar el silo
+  const tn = estimarTn(org, chapas, cereal);
+  const tnPrimera = tn * (chNuevo / chapas); // reparto proporcional entre lo nuevo y lo de repaso
+
+  d.mezcla.repaso -= chRepaso;
+  d.mezcla.nuevo  -= chNuevo;
+  d.chapas -= chapas;
+  if (d.chapas < 0.01) { d.chapas = 0; d.mezcla.repaso = 0; d.mezcla.nuevo = 0; }
+
+  const idDestino = d.cereal === 'soja' ? datos.circuito.soja : datos.circuito.maiz;
+  const destino = porId(idDestino);
+  destino.dato.cereal = d.cereal;
+  destino.dato.chapas = Math.min(destino.fam.chapas, destino.dato.chapas + chapas);
+
+  const puntos = Math.max(humEntrada - humSalida, 0);
+  const gas = tn * puntos * KG_GAS_POR_TN_PUNTO;
+  consumirGas(gas);
+
+  movimientos.push({ tn, tnPrimera, cereal, puntos, gas });
+  avanzar(70);
+  anotar(chRepaso > 0.05
+    ? `Trasilan ${num(chapas, 1)} chapas: ${num(chRepaso, 1)} de repaso y ${num(chNuevo, 1)} nuevas`
+    : `Pasan ${chapas} chapas del silo ${d.id} por la secadora`);
+  pintarTodo();
+
+  postSheet('PasadasSecado', 'append', {
+    Fecha: fecha || new Date().toISOString().slice(0, 10),
+    Cereal: nombreCereal(cereal),
+    SiloOrigen: org.dato.id,
+    Sentido: sentido,
+    Chapas: +chapas.toFixed(2),
+    HumedadEntrada: humEntrada,
+    HumedadSalida: humSalida,
+    Pasada: pasada,
+    SiloDestino: idDestino,
+    Toneladas: +tn.toFixed(2),
+    DisponiblePuerto: humSalida <= toleranciaPuerto(cereal) + 1e-9 ? 'SI' : 'NO'
+  });
+
+  return tn; // valor real de esta pasada, sin recontar el cono
+}
+
+/* vuelve del silo de enfriado a un previo para la segunda pasada */
+function opRepaso(chapas) {
+  const enMaiz = porId(datos.circuito.maiz);
+  const org = enMaiz.dato.chapas > 0 ? enMaiz : porId(datos.circuito.soja);
+  const dst = porId(datos.circuito.previo);
+  chapas = Math.min(chapas, org.dato.chapas, dst.fam.chapas - dst.dato.chapas);
+  if (chapas <= 0) { anotar('No hay mercadería para repasar'); pintarTodo(); return; }
+  org.dato.chapas -= chapas;
+  dst.dato.cereal = org.dato.cereal;
+  dst.dato.mezcla.repaso += chapas;
+  dst.dato.chapas += chapas;
+  avanzar(40);
+  anotar(`Vuelven ${chapas} chapas del silo ${org.dato.id} al ${dst.dato.id} para repasar`);
+  pintarTodo();
+}
+
+/* El gas ya no se descuenta por estimación: el consumo real sale de las lecturas
+   manuales de los relojes (pantalla "Consumo de gas"). */
+function consumirGas() {}
+
+/* ============================================================
+   PANTALLA
+   ============================================================ */
+
+function pintarKpis() {
+  const proc = movimientos.reduce((a, m) => a + m.tn, 0);
+  const seca = movimientos.reduce((a, m) => a + m.tnPrimera, 0);
+  const g = gasDelMes();
+  $('kProc').innerHTML = num(proc) + '<small>tn</small>';
+  $('kSeca').innerHTML = num(seca) + '<small>tn</small>';
+  $('kGasRot').textContent = g ? 'Gas de ' + g.nombre : 'Gas del mes';
+  $('kGas').innerHTML = g ? num(g.kg) + '<small>kg</small>' : '—';
+  $('kRatioRot').textContent = 'Gas por tn lista';
+  $('kRatio').innerHTML = g && g.tn ? num(g.kg / g.tn, 2) + '<small>kg/tn</small>' : '—';
+}
+
+function pintarBitacora() {
+  const ol = $('log');
+  if (!bitacora.length) { ol.innerHTML = '<li class="nada">Todavía no se movió nada.</li>'; return; }
+  ol.innerHTML = bitacora.map(b => `<li><span>${b.hora}</span> ${b.texto}</li>`).join('');
+}
+
+const panel = $('panel');
+let seleccion = null;
+
+function tnSilo(it) {
+  const f = it.fam, d = it.dato;
+  if (f.aOjo) return { m3: 0, real: d.chapas / f.chapas * f.tn };
+  const vol = volumenSilo(f, d);
+  return { m3: vol, real: vol * (DENSIDAD[d.cereal] || 0.7) };
+}
+
+function pintarPanel() {
+  if (!seleccion) {
+    panel.innerHTML = '<p class="vacio">Tocá un silo, un tubo o una bolsa para ver su carga.</p>';
+    return;
+  }
+  const it = seleccion;
+
+  if (it.tipo === 'silo') {
+    const d = it.dato, f = it.fam, t = tnSilo(it);
+    const rol = d.rol ? ROLES[d.rol] : null;
+    const mez = d.mezcla && d.chapas > 0 && d.mezcla.repaso > 0.05 && d.mezcla.nuevo > 0.05;
+    const total = d.mezcla ? (d.mezcla.repaso + d.mezcla.nuevo) : 0;
+    panel.innerHTML = `
+      <h2>${nombreUnidad(d, f)}</h2>
+      <p class="rol">${rol ? rol.texto + (rol.firme ? '' : ' · a confirmar') : (f.aereo ? (d.semilla ? 'Silo aéreo · semilla' : 'Silo aéreo') : f.fondoPlano ? 'Fondo plano, sin cono inferior' : 'Almacenaje')}</p>
+      <div class="dato principal"><span>Cargado</span><span>${num(t.real, 2)} tn</span></div>
+      <div class="dato"><span>${d.semilla ? 'Contenido' : 'Cereal'}</span><span>${contenidoSilo(d)}</span></div>
+      ${f.aOjo
+        ? `<div class="dato"><span>Nivel</span><span>${num(d.chapas / f.chapas * 100)} %</span></div>`
+        : `<div class="dato"><span>Chapas</span><span>${num(d.chapas, d.chapas % 1 ? 1 : 0)} de ${f.chapas}${f.chapaM ? ` · ${num(f.chapaM, 2)} m` : ''}</span></div>
+           <div class="dato"><span>Volumen ocupado</span><span>${num(t.m3, 2)} m³</span></div>`}
+      <div class="dato"><span>Capacidad</span><span>${num(f.tn)} tn</span></div>
+      ${mez ? `
+        <div class="mezcla">
+          <div class="barra">
+            <i style="width:${d.mezcla.repaso / total * 100}%;background:#B07A16"></i>
+            <i style="width:${d.mezcla.nuevo / total * 100}%;background:${CSS_COLOR[d.cereal] || '#E0A92B'}"></i>
+          </div>
+          <div class="pie">
+            <span>${num(d.mezcla.repaso, 1)} ch. de repaso</span>
+            <span>${num(d.mezcla.nuevo, 1)} ch. nuevas</span>
+          </div>
+        </div>
+        <p class="aviso">Adentro está mezclado: lo que salga arrastra esa misma proporción.</p>` : ''}
+      ${f.chapaM && !mez && !f.aOjo && !f.chapasPendientes ? `<p class="nota">La capacidad de planilla está calculada a ${num(f.densidadNominal, 2)} t/m³ con el techo lleno. Lo cargado sale del volumen por la densidad del cereal.</p>` : ''}
+      ${d.copete && !f.aOjo ? `<p class="nota">El copete toma el cono superior de la planilla: ${num(f.m3Copete, 2)} m³, un talud de ${num(f.taludCopete, 0)}°.</p>` : ''}
+      ${f.fondoPlano ? '<p class="aviso">Sin cono inferior: hay que barrer, el calculado se aparta del real cuando queda poco.</p>' : ''}
+      ${f.estimado ? '<p class="aviso">Capacidad de planta, medidas estimadas: falta el cubicaje real de esta planta.</p>' : ''}
+      ${f.chapasPendientes ? `<p class="aviso">Diámetro y conos de la planilla de cubicaje. Cantidad de chapas (${f.chapas}) provisoria: a confirmar en planta.</p>` : ''}
+      ${f.aOjo ? '<p class="nota">Sin cubicaje: tienen formas distintas y se llevan a ojo. El nivel va en décimos de la capacidad y las toneladas salen de esa proporción, no del volumen.</p>' : ''}
+      <div class="mando">
+        <button data-ch="${f.aOjo ? -1 : -0.5}" aria-label="Bajar el nivel">−</button>
+        <span class="lectura">${f.aOjo ? 'de a 10 %' : 'de a ½ chapa'}</span>
+        <button data-ch="${f.aOjo ? 1 : 0.5}" aria-label="Subir el nivel">+</button>
+      </div>
+      <select id="selCereal" aria-label="Contenido">${d.semilla ? opcionesSemilla(d.cereal) : opcionesCereal(d.cereal, f.aereo)}</select>
+      ${d.semilla && d.cereal !== 'vacio' ? `<input id="inpVariedad" type="text" placeholder="Variedad (ej.: DM 46R18)" value="${(d.variedad || '').replace(/"/g, '&quot;')}" aria-label="Variedad de la semilla" style="width:100%;margin-top:6px;padding:6px 8px;border:1px solid var(--linea);font:inherit;box-sizing:border-box;">` : ''}
+      ${f.aOjo ? '' : `<select id="selCopete" aria-label="Copete del grano">
+        <option value="0"${!d.copete ? ' selected' : ''}>Enrasado</option>
+        <option value="1"${d.copete === 1 ? ' selected' : ''}>Copete arriba (+${num(f.m3Copete, 2)} m³)</option>
+        <option value="-1"${d.copete === -1 ? ' selected' : ''}>Embudo abajo (−${num(f.m3Copete, 2)} m³)</option>
+      </select>`}
+    `;
+    panel.querySelectorAll('[data-ch]').forEach(b => b.onclick = () => {
+      const paso = +b.dataset.ch;
+      d.chapas = Math.max(0, Math.min(f.chapas, Math.round((d.chapas + paso) * 2) / 2));
+      if (d.mezcla) { d.mezcla.repaso = 0; d.mezcla.nuevo = d.chapas; }
+      if (d.chapas > 0 && d.cereal === 'vacio') d.cereal = d.semilla ? 'soja' : 'maiz';
+      pintarPanel();
+      sincronizarCubicaje([d.id]);
+    });
+    if ($('selCopete')) $('selCopete').onchange = e => { d.copete = +e.target.value; pintarPanel(); };
+    if ($('inpVariedad')) $('inpVariedad').onchange = e => {
+      d.variedad = e.target.value.trim();
+      pintarPanel();
+      sincronizarCubicaje([d.id]);
+    };
+    $('selCereal').onchange = e => {
+      d.cereal = e.target.value;
+      if (d.semilla) d.variedad = '';            /* otra especie: la variedad anterior ya no corre */
+      if (d.cereal === 'vacio') { d.chapas = 0; if (d.mezcla) { d.mezcla.repaso = 0; d.mezcla.nuevo = 0; } }
+      pintarPanel();
+      sincronizarCubicaje([d.id]);
+    };
+    return;
+  }
+
+  if (it.tipo === 'tubo') {
+    const d = it.dato, cfg = TUBOS_GAS[d.id];
+    const litros = d.nivel / 100 * cfg.litros, kg = litros * DENSIDAD_GAS;
+    const g = gasDelMes();
+    const ult = lecturasGas[lecturasGas.length - 1];
+    panel.innerHTML = `
+      <h2>Tubo ${String(d.id).slice(1)}</h2>
+      <p class="rol">Gas de la secadora · propano</p>
+      <div class="dato principal"><span>Nivel</span><span>${num(d.nivel, d.nivel % 1 ? 1 : 0)}%</span></div>
+      <div class="dato"><span>Propano</span><span>${num(kg)} kg</span></div>
+      <div class="dato"><span>Litros</span><span>${num(litros)} L</span></div>
+      <div class="dato"><span>Capacidad</span><span>${num(cfg.litros)} L</span></div>
+      ${g ? `<div class="dato"><span>Consumió en ${g.nombre}</span><span>${num(g.porTubo[d.id])} kg</span></div>` : ''}
+      <p class="nota">${ult ? 'Lectura del ' + fechaLegible(ult.fh) + '.' : 'Nivel de la foto del 29/09: todavía no hay lecturas cargadas.'} Chapa ${cfg.serie}.</p>
+      <div class="mando"><button class="quitar" id="opLeerRelojes" style="border-color:var(--steel);color:var(--ink);">Cargar lectura de los relojes</button></div>`;
+    $('opLeerRelojes').onclick = abrirGas;
+    return;
+  }
+
+  const d = it.dato;
+  const pl = (datos.playones || []).find(p => p.id === d.playon);
+  panel.innerHTML = `
+    <h2>Bolsón ${String(d.id).slice(1)}</h2>
+    <p class="rol">${pl ? pl.nombre : 'Playón'} · bolsón de ${d.largo} m</p>
+    <div class="dato principal"><span>Cargado</span><span>${num(d.metros * (BOLSA.tnPorMetro[d.cereal] || 0), 2)} tn</span></div>
+    <div class="dato"><span>Cereal</span><span>${nombreCereal(d.cereal)}</span></div>
+    <div class="dato"><span>Metros con grano</span><span>${d.metros} de ${d.largo}</span></div>
+    <div class="dato"><span>Por metro</span><span>${num(BOLSA.tnPorMetro[d.cereal] || 0, 2)} tn</span></div>
+    <p class="aviso">Diámetro y toneladas por metro estimados.</p>
+    <div class="mando">
+      <button data-m="-5" aria-label="Sacar metros">−</button>
+      <span class="lectura">de a 5 m</span>
+      <button data-m="5" aria-label="Agregar metros">+</button>
+    </div>
+    <select id="selCereal" aria-label="Cereal">${opcionesCereal(d.cereal)}</select>
+    <select id="selLargo" aria-label="Largo del bolsón">
+      ${LARGOS.map(l => `<option value="${l}"${l === d.largo ? ' selected' : ''}>Bolsón de ${l} m</option>`).join('')}
+    </select>
+    <div class="mando"><button class="quitar" id="opQuitarBolsa">Sacar el bolsón</button></div>`;
+  panel.querySelectorAll('[data-m]').forEach(b => b.onclick = () => {
+    d.metros = Math.max(0, Math.min(d.largo, d.metros + +b.dataset.m));
+    if (d.metros > 0 && d.cereal === 'vacio') d.cereal = 'maiz';
+    pintarPanel();
+  });
+  $('selCereal').onchange = e => {
+    d.cereal = e.target.value;
+    if (d.cereal === 'vacio') d.metros = 0;
+    pintarPanel();
+  };
+  $('selLargo').onchange = e => {
+    d.largo = +e.target.value;
+    d.metros = Math.min(d.metros, d.largo);
+    rehacerBolsa(it);
+  };
+  $('opQuitarBolsa').onclick = () => quitarBolsa(d.id);
+}
+
+/* cambiar el largo obliga a rehacer la malla */
+function rehacerBolsa(it) {
+  const d = it.dato;
+  quitarBolsa(d.id, true);
+  const usados = datos.bolsas.filter(b => b.playon === d.playon).length;
+  ubicarBolsa(d, usados);
+  datos.bolsas.push(d);
+  armarBolsa(d);
+  seleccionar(d.id);
+}
+
+const opcionesCereal = (sel, insumos) => [...GRANOS, ...(insumos ? INSUMOS : []), 'vacio']
+  .map(c => `<option value="${c}"${c === sel ? ' selected' : ''}>${nombreCereal(c)}</option>`).join('');
+const opcionesSemilla = sel => [...SEMILLAS, 'vacio']
+  .map(c => `<option value="${c}"${c === sel ? ' selected' : ''}>${c === 'vacio' ? 'Vacío' : 'Semilla de ' + nombreCereal(c).toLowerCase()}</option>`).join('');
+const contenidoSilo = d => d.semilla && d.cereal !== 'vacio'
+  ? `Semilla de ${nombreCereal(d.cereal).toLowerCase()}${d.variedad ? ' · ' + d.variedad : ''}`
+  : nombreCereal(d.cereal);
+
+/* ============================================================
+   CUBICAJE
+   ============================================================ */
+
+function abrirCubicaje() {
+  const filas = [];
+  const porCereal = {};
+  let totalTn = 0, totalInsumo = 0, totalSemilla = 0;
+
+  datos.silos.forEach(s => {
+    const f = FAMILIAS[s.fam];
+    const vol = f.aOjo ? 0 : volumenSilo(f, s);
+    const tn = f.aOjo ? s.chapas / f.chapas * f.tn : vol * (DENSIDAD[s.cereal] || 0.7);
+    const esInsumo = INSUMOS.includes(s.cereal);
+    const esSemilla = s.semilla && s.cereal !== 'vacio';
+    if (esInsumo) totalInsumo += tn; else if (esSemilla) totalSemilla += tn; else totalTn += tn;
+    const grupo = esSemilla ? 'Semilla de ' + nombreCereal(s.cereal).toLowerCase() : s.cereal;
+    if (s.chapas > 0) porCereal[grupo] = (porCereal[grupo] || 0) + tn;
+    filas.push({
+      nombre: nombreUnidad(s, f), cereal: s.cereal, contenido: contenidoSilo(s),
+      nivel: f.aOjo ? `${num(s.chapas / f.chapas * 100)} %` : `${num(s.chapas, s.chapas % 1 ? 1 : 0)} / ${f.chapas} ch.${s.copete === 1 ? ' ▲' : s.copete === -1 ? ' ▼' : ''}`,
+      cap: f.tn, tn, alt: vol ? num(vol, 2) + ' m³' : ''
+    });
+  });
+
+  datos.bolsas.forEach(b => {
+    const tn = b.metros * (BOLSA.tnPorMetro[b.cereal] || 0);
+    totalTn += tn;
+    if (b.metros > 0) porCereal[b.cereal] = (porCereal[b.cereal] || 0) + tn;
+    filas.push({
+      nombre: `Bolsa ${String(b.id).slice(1)}`, cereal: b.cereal,
+      nivel: `${b.metros} / ${b.largo} m`,
+      cap: b.largo * (BOLSA.tnPorMetro[b.cereal] || 3.3), tn, alt: ''
+    });
+  });
+
+  $('cubTitulo').textContent = `Cubicaje — ${datos.titulo}`;
+  $('cubSub').textContent = `Al ${new Date().toLocaleDateString('es-AR')} · ${filas.length} unidades de almacenaje`;
+
+  $('cubTabla').innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Unidad</th><th>Contenido</th><th>Nivel</th><th>Capacidad</th><th>Volumen</th><th>Existencia</th>
+      </tr></thead>
+      <tbody>
+        ${filas.map(f => `
+          <tr class="${f.tn ? '' : 'vacia'}">
+            <td>${f.nombre}</td>
+            <td>${f.contenido || nombreCereal(f.cereal)}</td>
+            <td>${f.nivel}</td>
+            <td>${num(f.cap)} tn</td>
+            <td>${f.alt}</td>
+            <td><b>${f.tn ? num(f.tn, 2) + ' tn' : '—'}</b></td>
+          </tr>`).join('')}
+      </tbody>
+      <tfoot><tr>
+        <td colspan="5">Total de cereal en planta</td>
+        <td>${num(totalTn, 2)} tn</td>
+      </tr>${totalSemilla ? `<tr>
+        <td colspan="5">Semillas en aéreos, aparte</td>
+        <td>${num(totalSemilla, 2)} tn</td>
+      </tr>` : ''}${totalInsumo ? `<tr>
+        <td colspan="5">Insumos (urea y fertilizante), aparte</td>
+        <td>${num(totalInsumo, 2)} tn</td>
+      </tr>` : ''}</tfoot>
+    </table>`;
+
+  $('cubTotales').innerHTML = Object.entries(porCereal)
+    .sort((a, b) => b[1] - a[1])
+    .map(([c, tn]) => `<div><div class="rot">${nombreCereal(c)}</div><div class="cifra">${num(tn, 2)}<small> tn</small></div></div>`)
+    .join('') || '<div><div class="rot">Sin existencias</div></div>';
+
+  $('cubPie').textContent = 'Las existencias salen del volumen ocupado por la densidad del cereal (maíz 0,70 · trigo 0,75 · soja 0,65 · cebada 0,60 · girasol 0,42). La columna Capacidad es la nominal de la planilla, calculada a unos 0,80 t/m³ con el techo lleno, así que siempre da más alta. Los aéreos no tienen cubicaje: van a ojo, en décimos de su capacidad. Los aéreos 1 a 7 guardan semilla y suman aparte del cereal, igual que los de urea y fertilizante. Los bolsones se cargan por metros con grano y su tonelada por metro es estimada. ▲ marca el silo con copete de carga y ▼ el que está con embudo de extracción: el volumen ya lo tiene sumado o restado, tomando el cono superior de la planilla.';
+
+  document.getElementById('cubicaje').classList.add('abierto');
+}
+
+function pintarTodo() { pintarKpis(); pintarBitacora(); pintarPanel(); }
+
+function seleccionar(ref) {
+  seleccion = ref === null ? null : porId(ref);
+  const enfoque = circuitoGrupo && circuitoGrupo.visible;
+  items.forEach(it => {
+    if (!it.paredMat) return;
+    const base = enfoque && !enCircuito.has(it.dato.id) ? 0.14 : 0.42;
+    it.paredMat.opacity = seleccion && it.dato.id === seleccion.dato.id ? 0.66 : base;
+  });
+  pintarPanel();
+}
+
+/* ============================================================
+   CÁMARA
+   ============================================================ */
+
+const foco = new THREE.Vector3(-4, 5, 22);
+let radio = 118, azim = -0.5, polar = 0.93;
+
+function ubicarCamara() {
+  polar = Math.max(0.14, Math.min(1.45, polar));
+  radio = Math.max(28, Math.min(280, radio));
+  camara.position.set(
+    foco.x + radio * Math.sin(polar) * Math.sin(azim),
+    foco.y + radio * Math.cos(polar),
+    foco.z + radio * Math.sin(polar) * Math.cos(azim));
+  camara.lookAt(foco);
+}
+
+let arrastrando = false, movido = false, ultX = 0, ultY = 0, pinch = 0;
+const lienzo = render.domElement;
+lienzo.addEventListener('pointerdown', e => { arrastrando = true; movido = false; ultX = e.clientX; ultY = e.clientY; });
+lienzo.addEventListener('pointermove', e => {
+  if (!arrastrando) return;
+  const dx = e.clientX - ultX, dy = e.clientY - ultY;
+  if (Math.abs(dx) + Math.abs(dy) > 3) movido = true;
+  azim -= dx * 0.005; polar -= dy * 0.005;
+  ultX = e.clientX; ultY = e.clientY; ubicarCamara();
+});
+lienzo.addEventListener('pointerup', e => { arrastrando = false; if (!movido) elegir(e.clientX, e.clientY); });
+lienzo.addEventListener('pointerleave', () => arrastrando = false);
+lienzo.addEventListener('wheel', e => { e.preventDefault(); radio += e.deltaY * 0.1; ubicarCamara(); }, { passive: false });
+lienzo.addEventListener('touchstart', e => {
+  if (e.touches.length === 2) pinch = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+}, { passive: true });
+lienzo.addEventListener('touchmove', e => {
+  if (e.touches.length === 2 && pinch) {
+    const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    radio *= pinch / d; pinch = d; ubicarCamara();
+  }
+}, { passive: true });
+
+const rayo = new THREE.Raycaster(), puntero = new THREE.Vector2();
+function elegir(x, y) {
+  puntero.set((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1);
+  rayo.setFromCamera(puntero, camara);
+  const g = rayo.intersectObjects(clicables, false);
+  seleccionar(g.length ? g[0].object.userData.ref : null);
+}
+
+addEventListener('resize', () => {
+  camara.aspect = innerWidth / innerHeight;
+  camara.updateProjectionMatrix();
+  render.setSize(innerWidth, innerHeight);
+});
+
+/* ============================================================
+   CONSOLA
+   ============================================================ */
+
+function pintarPaso() {
+  $('chapas').textContent = num(chapasPaso, chapasPaso % 1 ? 1 : 0);
+  const kgEl = $('kgMovimiento');
+  if (!kgEl) return;
+  if (datos && datos.circuito) {
+    const it = porId(datos.circuito.previo);
+    if (it) {
+      const cerealCalc = $('cerealPasada') ? $('cerealPasada').value : it.dato.cereal;
+      const tnMov = estimarTn(it, chapasPaso, cerealCalc);
+      const tnTotal = volumenSilo(it.fam, it.dato) * (DENSIDAD[it.dato.cereal] || 0.7);
+      const copeteTxt = it.dato.copete === 1 ? ' — copete arriba' : it.dato.copete === -1 ? ' — copete abajo' : '';
+      kgEl.innerHTML = `Vas a mover ≈ ${num(tnMov * 1000, 0)} kg (${nombreCereal(cerealCalc)}, ${pasadaActual}° pasada${copeteTxt})<br>` +
+        `Hay en total en el silo ${it.dato.id} ≈ ${num(tnTotal * 1000, 0)} kg`;
+    } else {
+      kgEl.textContent = '';
+    }
+  } else {
+    kgEl.textContent = '';
+  }
+}
+$('menos').onclick = () => { chapasPaso = Math.max(0.5, chapasPaso - 0.5); pintarPaso(); };
+$('mas').onclick   = () => { chapasPaso = Math.min(11, chapasPaso + 0.5); pintarPaso(); };
+function marcarPrevio(id) {
+  datos.circuito.previo = id;
+  $('prev3').setAttribute('aria-pressed', String(id === 3));
+  $('prev1').setAttribute('aria-pressed', String(id === 1));
+}
+function reflejarCopetePrevio() {
+  const it = porId(datos.circuito.previo);
+  const v = it ? (it.dato.copete || 0) : 0;
+  if ($('sentAriba')) $('sentAriba').setAttribute('aria-pressed', String(v === 1));
+  if ($('sentEnrasado')) $('sentEnrasado').setAttribute('aria-pressed', String(v === 0));
+  if ($('sentAbajo')) $('sentAbajo').setAttribute('aria-pressed', String(v === -1));
+}
+$('prev3').onclick = () => { marcarPrevio(3); if ($('cerealPasada')) $('cerealPasada').value = 'maiz'; pintarTodo(); pintarPaso(); reflejarCopetePrevio(); };
+$('prev1').onclick = () => { marcarPrevio(1); if ($('cerealPasada')) $('cerealPasada').value = 'soja'; pintarTodo(); pintarPaso(); reflejarCopetePrevio(); };
+
+let pasadaActual = 1;
+if ($('fechaPasada')) $('fechaPasada').value = new Date().toISOString().slice(0, 10);
+if ($('cerealPasada')) $('cerealPasada').value = 'maiz';
+function marcarCopetePrevio(valor) {
+  const it = porId(datos.circuito.previo);
+  if (!it) return;
+  it.dato.copete = valor;
+  $('sentAriba').setAttribute('aria-pressed', String(valor === 1));
+  $('sentEnrasado').setAttribute('aria-pressed', String(valor === 0));
+  $('sentAbajo').setAttribute('aria-pressed', String(valor === -1));
+  sincronizarCubicaje([it.dato.id]);
+  pintarPaso();
+}
+$('sentAriba').onclick = () => marcarCopetePrevio(1);
+$('sentEnrasado').onclick = () => marcarCopetePrevio(0);
+$('sentAbajo').onclick = () => marcarCopetePrevio(-1);
+$('pasada1').onclick = () => { pasadaActual = 1; $('pasada1').setAttribute('aria-pressed','true'); $('pasada2').setAttribute('aria-pressed','false'); pintarPaso(); };
+$('pasada2').onclick = () => { pasadaActual = 2; $('pasada2').setAttribute('aria-pressed','true'); $('pasada1').setAttribute('aria-pressed','false'); pintarPaso(); };
+if ($('cerealPasada')) $('cerealPasada').onchange = pintarPaso;
+
+let moduloActual = 'cubicaje';
+function setModulo(m) {
+  moduloActual = m;
+  $('tabCubicaje').setAttribute('aria-pressed', String(m === 'cubicaje'));
+  $('tabSecado').setAttribute('aria-pressed', String(m === 'secado'));
+  if (typeof datos !== 'undefined' && datos) { aplicarVisibilidadModulo(); pintarTodo(); }
+}
+$('tabCubicaje').onclick = () => setModulo('cubicaje');
+$('tabSecado').onclick   = () => setModulo('secado');
+setModulo('cubicaje');
+document.querySelectorAll('#largos [data-largo]').forEach(b => b.onclick = () => {
+  largoNuevo = +b.dataset.largo;
+  document.querySelectorAll('#largos [data-largo]').forEach(o =>
+    o.setAttribute('aria-pressed', String(+o.dataset.largo === largoNuevo)));
+});
+$('opCircuito').onclick = e => {
+  if (!circuitoGrupo) return;
+  circuitoGrupo.visible = !circuitoGrupo.visible;
+  e.currentTarget.setAttribute('aria-pressed', String(circuitoGrupo.visible));
+  items.forEach(it => {
+    if (!it.paredMat) return;
+    it.paredMat.opacity = circuitoGrupo.visible && !enCircuito.has(it.dato.id) ? 0.14 : 0.42;
+  });
+};
+$('opIngreso').onclick = () => { opIngreso(chapasPaso); sincronizarCubicaje(SILOS_CIRCUITO); };
+$('opSecar').onclick   = () => {
+  const hEnt = Number($('humEntrada').value) || 18.2;
+  const hSal = Number($('humSalida').value) || 15.6;
+  const fecha = $('fechaPasada').value || new Date().toISOString().slice(0, 10);
+  const cerealElegido = $('cerealPasada') ? $('cerealPasada').value : null;
+  const itPrevio = porId(datos.circuito.previo);
+  const sentidoLog = itPrevio && itPrevio.dato.copete === 1 ? 'copete arriba' : itPrevio && itPrevio.dato.copete === -1 ? 'copete abajo' : 'enrasado';
+  const tnReal = opSecar(chapasPaso, hEnt, hSal, sentidoLog, pasadaActual, fecha, cerealElegido);
+  if (tnReal !== undefined) {
+    $('kgResultado').textContent = `Última pasada: ${num(tnReal * 1000, 0)} kg secados`;
+  }
+  sincronizarCubicaje(SILOS_CIRCUITO);
+};
+$('opRepaso').onclick  = () => { opRepaso(chapasPaso); sincronizarCubicaje(SILOS_CIRCUITO); };
+$('btnMonaco').onclick = () => { cargarPlanta('monaco'); pintarPaso(); reflejarCopetePrevio(); if ($('kgResultado')) $('kgResultado').textContent = ''; };
+$('btnVirgen').onclick = () => { cargarPlanta('virgen'); pintarPaso(); reflejarCopetePrevio(); if ($('kgResultado')) $('kgResultado').textContent = ''; };
+$('opReset').onclick   = () => { reloj = 8 * 60; cargarPlanta('monaco'); pintarPaso(); reflejarCopetePrevio(); if ($('kgResultado')) $('kgResultado').textContent = ''; };
+$('opCubicaje').onclick = abrirCubicaje;
+$('cubCerrar').onclick  = () => document.getElementById('cubicaje').classList.remove('abierto');
+$('cubImprimir').onclick = () => window.print();
+$('opPasadas').onclick = abrirPasadas;
+$('pasCerrar').onclick = () => document.getElementById('modalPasadas').classList.remove('abierto');
+$('opConfig').onclick = abrirConfig;
+$('configCerrar').onclick = () => document.getElementById('modalConfig').classList.remove('abierto');
+$('opGas').onclick = abrirGas;
+$('gasCerrar').onclick = () => document.getElementById('modalGas').classList.remove('abierto');
+$('gasImprimir').onclick = () => window.print();
+$('pasImprimir').onclick = () => window.print();
+document.querySelectorAll('.cubicaje').forEach(modal => {
+  modal.onclick = e => { if (e.target === modal) modal.classList.remove('abierto'); };
+});
+addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.querySelectorAll('.cubicaje.abierto').forEach(m => m.classList.remove('abierto'));
+});
+
+let pasadasCache = [];
+let gasCache = [];
+
+/* costo total ($) de cada mes, a partir de ConsumoGas */
+function costoPorMes() {
+  const mapa = {};
+  gasCache.forEach(g => {
+    const consumo = Number(g.Consumo_m3_o_litros) || 0;
+    const tarifa = Number(g.Tarifa) || 0;
+    if (consumo && tarifa) mapa[g.Mes] = consumo * tarifa;
+  });
+  return mapa;
+}
+
+/* tn totales pasadas por secadora en cada mes, SIEMPRE sobre el total real (no sobre lo filtrado) */
+function tnTotalPorMes() {
+  const mapa = {};
+  pasadasCache.forEach(p => {
+    const mes = (p.Fecha || '').slice(0, 7);
+    if (!mes) return;
+    mapa[mes] = (mapa[mes] || 0) + (Number(p.Toneladas) || 0);
+  });
+  return mapa;
+}
+
+async function abrirPasadas() {
+  $('pasTabla').innerHTML = '<p class="vacio">Cargando…</p>';
+  document.getElementById('modalPasadas').classList.add('abierto');
+  const remoto = await fetchSheet();
+  pasadasCache = (remoto && remoto.PasadasSecado) ? remoto.PasadasSecado : [];
+  gasCache = (remoto && remoto.ConsumoGas) ? remoto.ConsumoGas : [];
+  $('pasSub').textContent = remoto
+    ? `${pasadasCache.length} pasadas registradas en la Sheet`
+    : 'Sin conexión con la Sheet — configurá WEBAPP_URL para ver el registro real';
+
+  // arma el combo de meses disponibles
+  const meses = [...new Set(pasadasCache.map(p => (p.Fecha || '').slice(0, 7)).filter(Boolean))].sort().reverse();
+  $('pasFiltroMes').innerHTML = '<option value="">Todos los meses</option>' + meses.map(m => `<option value="${m}">${m}</option>`).join('');
+  $('pasFiltroDesde').value = '';
+  $('pasFiltroHasta').value = '';
+
+  pintarPasadasFiltradas(pasadasCache);
+}
+
+function pintarPasadasFiltradas(filas) {
+  if (!filas.length) {
+    $('pasTabla').innerHTML = '<p class="vacio">No hay pasadas en ese rango.</p>';
+    return;
+  }
+
+  // resumen por mes: total pasado por la secadora (todas las pasadas, incluye las que se repiten),
+  // lo que ya quedó listo para puerto, y lo que hizo una pasada pero todavía le falta otra
+  const porMes = {};
+  filas.forEach(p => {
+    const mes = (p.Fecha || '').slice(0, 7); // YYYY-MM
+    if (!mes) return;
+    if (!porMes[mes]) porMes[mes] = { total: 0, listo: 0, pendiente: 0 };
+    const tn = Number(p.Toneladas) || 0;
+    porMes[mes].total += tn;
+    if (listaParaPuerto(p)) porMes[mes].listo += tn;
+    else porMes[mes].pendiente += tn;
+  });
+  const meses = Object.keys(porMes).sort().reverse();
+  const totalGeneral = meses.reduce((a, m) => a + porMes[m].total, 0);
+  const listoGeneral = meses.reduce((a, m) => a + porMes[m].listo, 0);
+  const pendienteGeneral = meses.reduce((a, m) => a + porMes[m].pendiente, 0);
+
+  const resumenHtml = meses.length ? `
+    <table style="margin-bottom:14px;">
+      <thead><tr><th>Mes</th><th>Tn pasadas por secadora</th><th>Tn listas para puerto</th><th>Tn pendientes (falta otra pasada)</th></tr></thead>
+      <tbody>
+        ${meses.map(m => `<tr><td>${m}</td><td>${num(porMes[m].total, 2)} tn</td><td><b>${num(porMes[m].listo, 2)} tn</b></td><td>${num(porMes[m].pendiente, 2)} tn</td></tr>`).join('')}
+        <tr><td><b>Total</b></td><td><b>${num(totalGeneral, 2)} tn</b></td><td><b>${num(listoGeneral, 2)} tn</b></td><td><b>${num(pendienteGeneral, 2)} tn</b></td></tr>
+      </tbody>
+    </table>
+    <p class="pie" style="margin-bottom:14px;">"Tn pasadas por secadora" suma cada pasada tal cual (si algo pasó dos veces, cuenta las dos). "Tn listas para puerto" y "Tn pendientes" reparten ese mismo total según si la humedad de salida llegó o no a la tolerancia.</p>` : '';
+
+  const costosMes = costoPorMes();
+  const tnMes = tnTotalPorMes();
+
+  $('pasTabla').innerHTML = resumenHtml + `<div class="tabla-scroll">
+    <table>
+      <thead><tr>
+        <th>Fecha</th><th>Cereal</th><th>Origen</th><th>Sentido</th><th>Chapas</th>
+        <th>H. ent.</th><th>H. sal.</th><th>Pasada</th><th>Destino</th><th>Toneladas</th><th>Puerto</th><th>Costo pasada ($)</th><th></th>
+      </tr></thead>
+      <tbody>
+        ${filas.slice().reverse().map((p, idx) => {
+          const mes = (p.Fecha || '').slice(0, 7);
+          const costoMes = costosMes[mes] || 0;
+          const totalMes = tnMes[mes] || 0;
+          const tn = Number(p.Toneladas) || 0;
+          const cuota = (costoMes && totalMes) ? (tn / totalMes) * costoMes : 0;
+          return `
+          <tr data-idx="${idx}">
+            <td>${p.Fecha||''}</td><td>${p.Cereal||''}</td><td>${p.SiloOrigen||''}</td><td>${p.Sentido||''}</td>
+            <td>${p.Chapas||''}</td><td>${p.HumedadEntrada||''}</td><td>${p.HumedadSalida||''}</td>
+            <td>${p.Pasada||''}</td><td>${p.SiloDestino||''}</td><td><b>${p.Toneladas||''} tn</b></td>
+            <td>${listaParaPuerto(p) ? 'Sí' : 'No'}</td>
+            <td>${cuota ? '$' + num(cuota, 2) : '—'}</td>
+            <td><button class="mini" data-role="borrarPasada">Borrar</button></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table></div>`;
+
+  const invertidas = filas.slice().reverse();
+  $('pasTabla').querySelectorAll('[data-role="borrarPasada"]').forEach(btn => {
+    btn.onclick = async () => {
+      const idx = Number(btn.closest('tr').dataset.idx);
+      const fila = invertidas[idx];
+      if (!confirm(`¿Borrar la pasada del ${fila.Fecha} (${fila.Cereal}, ${fila.Chapas} chapas)?`)) return;
+      const res = await postSheet('PasadasSecado', 'delete', fila);
+      if (res && res.ok) {
+        anotar('Pasada borrada');
+        pasadasCache = pasadasCache.filter(p => p !== fila);
+        pintarPasadasFiltradas(filasFiltradas());
+      } else {
+        anotar('No se pudo borrar (puede que ya se haya borrado)');
+      }
+    };
+  });
+}
+
+function filasFiltradas() {
+  const mes = $('pasFiltroMes').value;
+  const desde = $('pasFiltroDesde').value;
+  const hasta = $('pasFiltroHasta').value;
+  return pasadasCache.filter(p => {
+    if (mes && (p.Fecha || '').slice(0, 7) !== mes) return false;
+    if (desde && (p.Fecha || '') < desde) return false;
+    if (hasta && (p.Fecha || '') > hasta) return false;
+    return true;
+  });
+}
+
+$('pasFiltrar').onclick = () => pintarPasadasFiltradas(filasFiltradas());
+$('pasLimpiarFiltro').onclick = () => {
+  $('pasFiltroMes').value = '';
+  $('pasFiltroDesde').value = '';
+  $('pasFiltroHasta').value = '';
+  pintarPasadasFiltradas(pasadasCache);
+};
+$('pasFiltroMes').onchange = () => { $('pasFiltroDesde').value = ''; $('pasFiltroHasta').value = ''; pintarPasadasFiltradas(filasFiltradas()); };
+
+$('pasDescargar').onclick = () => {
+  const filas = filasFiltradas();
+  if (!filas.length) { anotar('No hay pasadas para descargar con ese filtro'); return; }
+  const cols = ['Fecha','Cereal','SiloOrigen','Sentido','Chapas','HumedadEntrada','HumedadSalida','Pasada','SiloDestino','Toneladas','DisponiblePuerto'];
+  const csv = [cols.join(';')].concat(
+    filas.map(p => cols.map(c => String(p[c] ?? '').replace(/;/g, ',')).join(';'))
+  ).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const etiqueta = $('pasFiltroMes').value || 'todas';
+  a.href = url;
+  a.download = `pasadas-secado-${etiqueta}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+/* ============================================================
+   CONFIGURACIÓN: densidades por cereal y datos de cada silo
+   ============================================================ */
+const FAMILIA_LABEL_A_KEY = { '370': 'chica', '485': 'media', '1.481': 'grande', 'Plano': 'plano' };
+
+function slugCereal(nombre) {
+  return nombre.trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // saca acentos
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+function refrescarSelectCereal() {
+  const sel = $('cerealPasada');
+  if (!sel) return;
+  const actual = sel.value;
+  sel.innerHTML = GRANOS.map(k => `<option value="${k}">${nombreCereal(k)}</option>`).join('');
+  if (GRANOS.includes(actual)) sel.value = actual;
+}
+
+async function abrirConfig() {
+  $('configDensidades').innerHTML = '<p class="vacio">Cargando…</p>';
+  $('configSilos').innerHTML = '';
+  if ($('configAereos')) $('configAereos').innerHTML = '';
+  document.getElementById('modalConfig').classList.add('abierto');
+  const remoto = await fetchSheet();
+  const densRemotas = (remoto && remoto.Densidades) ? remoto.Densidades : [];
+  const silosRemotos = (remoto && remoto.DatosSilos) ? remoto.DatosSilos : [];
+
+  // mapa nombre-de-sheet -> clave interna, para no duplicar filas
+  const nombreAClave = {};
+  Object.keys(NOMBRES).forEach(k => { nombreAClave[NOMBRES[k]] = k; });
+
+  pintarConfigDensidades(densRemotas, nombreAClave);
+  pintarConfigSilos(silosRemotos);
+  pintarConfigAereos(silosRemotos);
+}
+
+function pintarConfigAereos(silosRemotos) {
+  const inp = (rol, val, paso, ancho) =>
+    `<input type="${rol === 'notas' ? 'text' : 'number'}" step="${paso}" value="${val}" data-role="${rol}" style="width:${ancho}px;padding:4px 6px;border:1px solid var(--linea);font:inherit;">`;
+  const aereos = PLANTAS.monaco.silos.filter(s => AEREOS_MONACO[s.id])
+    .sort((a, b) => String(a.id).localeCompare(String(b.id), 'es', { numeric: true }));
+  const filas = aereos.map(s => {
+    const f = FAMILIAS[s.fam];
+    const remoto = silosRemotos.find(r => String(r.SiloID) === String(s.id));
+    return { id: s.id, nombre: nombreUnidad(s, f), diam: +f.diam.toFixed(2), cap: f.tn,
+             conoInf: +f.conoInf.toFixed(2), conoSup: +f.conoSup.toFixed(2), notas: remoto ? (remoto.Notas || '') : '' };
+  });
+  $('configAereos').innerHTML = `<div class="tabla-scroll"><table>
+    <thead><tr><th>Aéreo</th><th>Diámetro (m)</th><th>Cap. nominal (T)</th><th>Cono inf. (m³)</th><th>Cono sup. (m³)</th><th>Notas</th><th></th></tr></thead>
+    <tbody>${filas.map(f => `
+      <tr data-id="${f.id}">
+        <td>${f.nombre}</td>
+        <td>${inp('diametro', f.diam, 0.01, 70)}</td>
+        <td>${inp('capNominal', f.cap, 1, 75)}</td>
+        <td>${inp('conoInf', f.conoInf, 0.01, 75)}</td>
+        <td>${inp('conoSup', f.conoSup, 0.01, 75)}</td>
+        <td>${inp('notas', f.notas, '', 120)}</td>
+        <td><button class="mini" data-role="guardarAereo">Guardar</button></td>
+      </tr>`).join('')}</tbody></table></div>`;
+
+  $('configAereos').querySelectorAll('[data-role="guardarAereo"]').forEach(btn => {
+    btn.onclick = async () => {
+      const tr = btn.closest('tr');
+      const id = tr.dataset.id;
+      const val = rol => tr.querySelector(`[data-role="${rol}"]`).value;
+      const row = {
+        SiloID: id, Familia: 'Aéreo',
+        Diametro_m: Number(val('diametro')) || 0,
+        CantChapas: 10,
+        ConoInferior_m3: Number(val('conoInf')) || 0,
+        ConoSuperior_m3: Number(val('conoSup')) || 0,
+        CapacidadNominal_T: Number(val('capNominal')) || 0,
+        Notas: val('notas')
+      };
+      await postSheet('DatosSilos', 'upsert', row, 'SiloID');
+      aplicarGeometria(FAMILIAS['aer_' + id], row);
+      if (planta === 'monaco') rearmarEscena();
+      pintarTodo();
+      anotar(`Medidas del ${tr.cells[0].textContent} actualizadas`);
+    };
+  });
+}
+
+function pintarConfigDensidades(densRemotas, nombreAClave) {
+  // arranca de las claves que ya conoce el motor (GRANOS), y les pisa el valor si la Sheet tiene algo distinto
+  const filas = GRANOS.map(clave => {
+    const fila = densRemotas.find(r => nombreAClave[r.Cereal] === clave || slugCereal(r.Cereal || '') === clave);
+    return { clave, nombre: NOMBRES[clave] || clave, valor: fila ? Number(fila.Densidad_t_m3) : (DENSIDAD[clave] ?? '') };
+  });
+  // agrega filas de la Sheet que no matchean ninguna clave conocida (cereales cargados desde otra sesión)
+  densRemotas.forEach(r => {
+    const clave = nombreAClave[r.Cereal] || slugCereal(r.Cereal || '');
+    if (!filas.find(f => f.clave === clave)) {
+      filas.push({ clave, nombre: r.Cereal, valor: Number(r.Densidad_t_m3) });
+    }
+  });
+
+  $('configDensidades').innerHTML = `
+    <table>
+      <thead><tr><th>Cereal</th><th>Densidad (t/m³)</th><th></th><th></th></tr></thead>
+      <tbody>
+        ${filas.map(f => `
+          <tr data-clave="${f.clave}" data-nombre="${f.nombre}">
+            <td>${f.nombre}</td>
+            <td><input type="number" step="0.01" value="${f.valor}" data-role="densidad" style="width:90px;padding:4px 6px;border:1px solid var(--linea);font:inherit;"></td>
+            <td><button class="mini" data-role="guardarDensidad">Guardar</button></td>
+            <td><button class="mini" data-role="borrarDensidad">Borrar</button></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+
+  $('configDensidades').querySelectorAll('[data-role="guardarDensidad"]').forEach(btn => {
+    btn.onclick = async () => {
+      const tr = btn.closest('tr');
+      const clave = tr.dataset.clave;
+      const nombre = tr.dataset.nombre;
+      const valor = Number(tr.querySelector('[data-role="densidad"]').value) || 0;
+      await postSheet('Densidades', 'upsert', { Cereal: nombre, Densidad_t_m3: valor }, 'Cereal');
+      DENSIDAD[clave] = valor;
+      pintarPaso();
+      pintarTodo();
+      anotar(`Densidad de ${nombre} actualizada a ${valor} t/m³`);
+    };
+  });
+
+  $('configDensidades').querySelectorAll('[data-role="borrarDensidad"]').forEach(btn => {
+    btn.onclick = async () => {
+      const tr = btn.closest('tr');
+      const clave = tr.dataset.clave;
+      const nombre = tr.dataset.nombre;
+      const aviso = (clave === 'maiz' || clave === 'soja')
+        ? `${nombre} lo usa el circuito de secado — borrarlo puede romper cálculos. ¿Borrar igual?`
+        : `¿Borrar ${nombre} de la lista de cereales?`;
+      if (!confirm(aviso)) return;
+      const res = await postSheet('Densidades', 'delete', { Cereal: nombre }, 'Cereal');
+      if (res && res.ok) {
+        anotar(`${nombre} borrado de Densidades`);
+      } else {
+        anotar('No se pudo borrar (puede que ya se haya borrado)');
+      }
+      const remoto = await fetchSheet();
+      pintarConfigDensidades((remoto && remoto.Densidades) || [], Object.fromEntries(Object.keys(NOMBRES).map(k => [NOMBRES[k], k])));
+      refrescarSelectCereal();
+    };
+  });
+}
+
+function pintarConfigSilos(silosRemotos) {
+  // 15 silos, tomando lo que haya en la Sheet y completando con lo que tiene el motor cargado
+  const filas = [];
+  for (let id = 1; id <= 15; id++) {
+    const it = porId(id);
+    const remoto = silosRemotos.find(r => String(r.SiloID) === String(id));
+    const familiaLabel = remoto ? remoto.Familia : (it ? Object.keys(FAMILIA_LABEL_A_KEY).find(l => FAMILIA_LABEL_A_KEY[l] === it.dato.fam) || it.dato.fam : '');
+    const fam = it ? it.fam : null;
+    filas.push({
+      id,
+      familia: familiaLabel || '',
+      diametro: remoto ? remoto.Diametro_m : (fam ? +fam.diam.toFixed(2) : ''),
+      chapas: remoto ? remoto.CantChapas : (fam ? fam.chapas : ''),
+      conoInf: remoto ? remoto.ConoInferior_m3 : (fam ? +fam.conoInf.toFixed(2) : ''),
+      conoSup: remoto ? remoto.ConoSuperior_m3 : (fam ? +fam.conoSup.toFixed(2) : ''),
+      capNominal: remoto ? remoto.CapacidadNominal_T : (fam ? fam.tn : ''),
+      notas: remoto ? (remoto.Notas || '') : ''
+    });
+  }
+
+  $('configSilos').innerHTML = `<div class="tabla-scroll">
+    <table>
+      <thead><tr>
+        <th>Silo</th><th>Familia</th><th>Diámetro (m)</th><th>Chapas</th>
+        <th>Cono inf. (m³)</th><th>Cono sup. (m³)</th><th>Cap. nominal (T)</th><th>Notas</th><th></th>
+      </tr></thead>
+      <tbody>
+        ${filas.map(f => `
+          <tr data-id="${f.id}" data-familia="${f.familia}">
+            <td>${f.id}</td>
+            <td>${f.familia}</td>
+            <td><input type="number" step="0.01" value="${f.diametro}" data-role="diametro" style="width:70px;padding:4px 6px;border:1px solid var(--linea);font:inherit;"></td>
+            <td><input type="number" step="1" value="${f.chapas}" data-role="chapas" style="width:55px;padding:4px 6px;border:1px solid var(--linea);font:inherit;"></td>
+            <td><input type="number" step="0.01" value="${f.conoInf}" data-role="conoInf" style="width:75px;padding:4px 6px;border:1px solid var(--linea);font:inherit;"></td>
+            <td><input type="number" step="0.01" value="${f.conoSup}" data-role="conoSup" style="width:75px;padding:4px 6px;border:1px solid var(--linea);font:inherit;"></td>
+            <td><input type="number" step="1" value="${f.capNominal}" data-role="capNominal" style="width:75px;padding:4px 6px;border:1px solid var(--linea);font:inherit;"></td>
+            <td><input type="text" value="${f.notas}" data-role="notas" style="width:120px;padding:4px 6px;border:1px solid var(--linea);font:inherit;"></td>
+            <td><button class="mini" data-role="guardarSilo">Guardar</button></td>
+          </tr>`).join('')}
+      </tbody>
+    </table></div>`;
+
+  $('configSilos').querySelectorAll('[data-role="guardarSilo"]').forEach(btn => {
+    btn.onclick = async () => {
+      const tr = btn.closest('tr');
+      const id = tr.dataset.id;
+      const familia = tr.dataset.familia;
+      const row = {
+        SiloID: id, Familia: familia,
+        Diametro_m: Number(tr.querySelector('[data-role="diametro"]').value) || 0,
+        CantChapas: Number(tr.querySelector('[data-role="chapas"]').value) || 0,
+        ConoInferior_m3: Number(tr.querySelector('[data-role="conoInf"]').value) || 0,
+        ConoSuperior_m3: Number(tr.querySelector('[data-role="conoSup"]').value) || 0,
+        CapacidadNominal_T: Number(tr.querySelector('[data-role="capNominal"]').value) || 0,
+        Notas: tr.querySelector('[data-role="notas"]').value
+      };
+      await postSheet('DatosSilos', 'upsert', row, 'SiloID');
+
+      const clave = FAMILIA_LABEL_A_KEY[familia];
+      if (clave && FAMILIAS[clave]) {
+        aplicarGeometria(FAMILIAS[clave], row);
+        if (planta === 'monaco') rearmarEscena();
+        pintarTodo();
+        pintarPaso();
+        anotar(`Geometría de la familia ${familia} actualizada (afecta a todos los silos de esa familia)`);
+      } else {
+        anotar(`Silo ${id} guardado en la Sheet`);
+      }
+    };
+  });
+}
+
+$('agregarCereal').onclick = async () => {
+  const nombre = $('nuevoCerealNombre').value.trim();
+  const valor = Number($('nuevoCerealDensidad').value);
+  if (!nombre || !valor) { anotar('Falta el nombre o la densidad del cereal nuevo'); return; }
+  const clave = slugCereal(nombre);
+  DENSIDAD[clave] = valor;
+  NOMBRES[clave] = nombre;
+  if (!COLORES[clave]) COLORES[clave] = 0x9AAFBE;
+  if (!CSS_COLOR[clave]) CSS_COLOR[clave] = '#9AAFBE';
+  if (!GRANOS.includes(clave)) GRANOS.push(clave);
+  await postSheet('Densidades', 'upsert', { Cereal: nombre, Densidad_t_m3: valor }, 'Cereal');
+  $('nuevoCerealNombre').value = '';
+  $('nuevoCerealDensidad').value = '';
+  refrescarSelectCereal();
+  const remoto = await fetchSheet();
+  pintarConfigDensidades((remoto && remoto.Densidades) || [], Object.fromEntries(Object.keys(NOMBRES).map(k => [NOMBRES[k], k])));
+  anotar(`Se agregó ${nombre} como cereal nuevo`);
+};
+
+/* ============================================================
+   CONSUMO DE GAS: carga mensual + cruce con kg listos para puerto
+   ============================================================ */
+function tnListasPorMes(pasadas) {
+  const porMes = {};
+  pasadas.forEach(p => {
+    if (!listaParaPuerto(p)) return;
+    const mes = (p.Fecha || '').slice(0, 7);
+    if (!mes) return;
+    porMes[mes] = (porMes[mes] || 0) + (Number(p.Toneladas) || 0);
+  });
+  return porMes;
+}
+
+/* ============================================================
+   GAS: lecturas manuales de los relojes de los 3 tubos
+   ============================================================ */
+const IDS_TUBO = ['T1', 'T2', 'T3'];
+const LS_PARAMS = 'gasParams', LS_PEND = 'lecturasGasPendientes';
+const TIPOS_LECTURA = { lectura: 'Lectura común', antes: 'Antes de la carga', despues: 'Después de la carga' };
+const RANGO_TIPO = { antes: 0, lectura: 1, despues: 2 };
+const MESES_NOMBRE = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+let lecturasGas = [];
+
+const lsLeer = (k, def) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch (e) { return def; } };
+const lsGuardar = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } };
+const pad2 = n => String(n).padStart(2, '0');
+const nombreMes = mes => MESES_NOMBRE[Number(mes.slice(5, 7)) - 1] || mes;
+const pctTxt = v => num(v, v % 1 ? 1 : 0);
+
+function hoyLocal() { const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+function horaLocal() { const d = new Date(); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
+function fechaLegible(fh) { return `${fh.slice(8, 10)}/${fh.slice(5, 7)}/${fh.slice(2, 4)} ${fh.slice(11, 16)}`; }
+
+/* la Sheet puede devolver la fecha como texto o como fecha: se lleva todo a "AAAA-MM-DD HH:MM" */
+function normFechaHora(v) {
+  if (v === undefined || v === null || v === '') return '';
+  const s = String(v).trim();
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{1,2}:\d{2}/.test(s) && !/(Z|[+-]\d{2}:?\d{2})$/.test(s)) {
+    const [f, h] = s.split(/[ T]/);
+    const [hh, mm] = h.split(':');
+    return `${f} ${pad2(hh)}:${mm.slice(0, 2)}`;
+  }
+  const d = new Date(s);
+  if (isNaN(d)) return /^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s} 00:00` : '';
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function normTipo(v) { const t = String(v || '').toLowerCase(); return t.includes('desp') ? 'despues' : t.includes('antes') ? 'antes' : 'lectura'; }
+function normLectura(r) {
+  return {
+    ID: String(r.ID || ''), fh: normFechaHora(r.FechaHora), tipo: normTipo(r.Tipo),
+    pct: { T1: parseFloat(r.T1_pct), T2: parseFloat(r.T2_pct), T3: parseFloat(r.T3_pct) },
+    remito: Number(r.KgRemito) || 0, notas: r.Notas ? String(r.Notas) : '', local: false
+  };
+}
+const lecturaValida = l => l.ID && l.fh && IDS_TUBO.every(id => isFinite(l.pct[id]));
+function filaDeLectura(l) {
+  return { ID: l.ID, FechaHora: l.fh, Tipo: TIPOS_LECTURA[l.tipo], T1_pct: l.pct.T1, T2_pct: l.pct.T2, T3_pct: l.pct.T3, KgRemito: l.remito || '', Notas: l.notas };
+}
+const ordenarLecturas = arr => arr.sort((a, b) => a.fh.localeCompare(b.fh) || RANGO_TIPO[a.tipo] - RANGO_TIPO[b.tipo] || a.ID.localeCompare(b.ID));
+
+/* lo que no pudo subir a la Sheet queda en este equipo hasta que se pueda reintentar */
+const pendientes = () => lsLeer(LS_PEND, []);
+function guardarPendiente(l) { const p = pendientes().filter(r => r.ID !== l.ID); p.push(filaDeLectura(l)); return lsGuardar(LS_PEND, p); }
+function quitarPendiente(id) { lsGuardar(LS_PEND, pendientes().filter(r => r.ID !== id)); }
+const subidaOk = res => !!res && res.ok !== false && !res.error;
+
+function cargarParamsGas() {
+  const p = lsLeer(LS_PARAMS, null);
+  if (!p) return;
+  if (p.dens > 0) DENSIDAD_GAS = p.dens;
+  IDS_TUBO.forEach(id => { if (p.litros && p.litros[id] > 0) TUBOS_GAS[id].litros = p.litros[id]; });
+}
+
+function cargarLecturasGas(remoto) {
+  const remotas = ((remoto && remoto.LecturasGas) || []).map(normLectura).filter(lecturaValida);
+  const ids = new Set(remotas.map(l => l.ID));
+  pendientes().filter(r => ids.has(String(r.ID))).forEach(r => quitarPendiente(r.ID));
+  const locales = pendientes().map(r => ({ ...normLectura(r), local: true })).filter(lecturaValida).filter(l => !ids.has(l.ID));
+  lecturasGas = ordenarLecturas([...remotas, ...locales]);
+}
+
+function aplicarLecturasATubos(d) {
+  if (!d || !d.tubos || planta !== 'monaco') return;
+  const ult = lecturasGas[lecturasGas.length - 1];
+  d.tubos.forEach(t => {
+    if (ult && isFinite(ult.pct[t.id])) t.nivel = ult.pct[t.id];
+    else { const base = PLANTAS.monaco.tubos.find(x => x.id === t.id); if (base) t.nivel = base.nivel; }
+  });
+}
+
+/* ---- cuentas: % del reloj → litros → kg de propano ---- */
+const litrosDe = (id, pct) => (Number(pct) || 0) / 100 * TUBOS_GAS[id].litros;
+const kgDe = (id, pct) => litrosDe(id, pct) * DENSIDAD_GAS;
+const stockKg = l => IDS_TUBO.reduce((a, id) => a + kgDe(id, l.pct[id]), 0);
+const stockLitros = l => IDS_TUBO.reduce((a, id) => a + litrosDe(id, l.pct[id]), 0);
+
+/* un tramo por cada par de lecturas consecutivas */
+function intervalosGas(lects) {
+  const out = [];
+  for (let i = 1; i < lects.length; i++) {
+    const a = lects[i - 1], b = lects[i];
+    const it = { desde: a, hasta: b, kg: 0, porTubo: { T1: 0, T2: 0, T3: 0 }, avisos: [], carga: b.tipo === 'despues', cargaRelojKg: 0, cargaRemitoKg: 0 };
+    if (b.tipo === 'despues') {
+      /* el nivel sube porque cargó el camión: eso no es consumo */
+      it.cargaRelojKg = IDS_TUBO.reduce((s, id) => s + Math.max(0, kgDe(id, b.pct[id] - a.pct[id])), 0);
+      it.cargaRemitoKg = b.remito;
+      if (a.tipo !== 'antes') {
+        if (b.remito > 0) {
+          it.kg = Math.max(0, stockKg(a) + b.remito - stockKg(b));
+          it.avisos.push('Falta la lectura de "antes de la carga": el consumo de este tramo sale del balance con el remito.');
+        } else {
+          it.avisos.push('Falta la lectura de "antes de la carga" y el remito: no se puede calcular el consumo de este tramo.');
+        }
+      }
+    } else {
+      IDS_TUBO.forEach(id => {
+        const dif = a.pct[id] - b.pct[id];
+        if (dif > 0) { const kg = kgDe(id, dif); it.kg += kg; it.porTubo[id] = kg; }
+        else if (dif < -1.5) it.avisos.push(`El tubo ${id.slice(1)} subió ${num(-dif, 1)} puntos sin una carga anotada.`);
+      });
+    }
+    out.push(it);
+  }
+  return out;
+}
+
+/* consumo por mes: cada tramo cuenta en el mes de su lectura final */
+function resumenPorMes(lects) {
+  const meses = {};
+  const get = m => meses[m] || (meses[m] = { relojKg: 0, remitoKg: 0, balanceKg: null, avisos: 0, intervalos: 0, porTubo: { T1: 0, T2: 0, T3: 0 } });
+  intervalosGas(lects).forEach(it => {
+    const m = get(it.hasta.fh.slice(0, 7));
+    m.relojKg += it.kg; m.intervalos++; m.avisos += it.avisos.length;
+    IDS_TUBO.forEach(id => { m.porTubo[id] += it.porTubo[id]; });
+    if (it.carga) m.remitoKg += it.cargaRemitoKg;
+  });
+  Object.keys(meses).forEach(mes => {
+    const idx = [];
+    lects.forEach((l, i) => { if (l.fh.slice(0, 7) === mes) idx.push(i); });
+    const ini = Math.max(idx[0] - 1, 0), fin = idx[idx.length - 1];
+    if (fin <= ini) return;
+    let remitos = 0;
+    for (let i = ini + 1; i <= fin; i++) if (lects[i].tipo === 'despues') remitos += lects[i].remito;
+    meses[mes].balanceKg = stockKg(lects[ini]) + remitos - stockKg(lects[fin]);
+  });
+  return meses;
+}
+
+/* el último mes con consumo calculado, para los indicadores de arriba */
+function gasDelMes() {
+  const res = resumenPorMes(lecturasGas);
+  const mes = Object.keys(res).filter(m => res[m].intervalos > 0).sort().pop();
+  if (!mes) return null;
+  return { mes, nombre: nombreMes(mes), kg: res[mes].relojKg, porTubo: res[mes].porTubo, tn: tnListasPorMes(pasadasCache)[mes] || 0 };
+}
+
+/* toneladas × puntos de humedad quitados, por mes (todas las pasadas) */
+function tnPuntosPorMes(pasadas) {
+  const porMes = {};
+  pasadas.forEach(p => {
+    const mes = (p.Fecha || '').slice(0, 7);
+    const pts = Number(p.HumedadEntrada) - Number(p.HumedadSalida), tn = Number(p.Toneladas);
+    if (!mes || !(pts > 0) || !(tn > 0)) return;
+    porMes[mes] = (porMes[mes] || 0) + tn * pts;
+  });
+  return porMes;
+}
+
+/* ---- pantalla ---- */
+function estadoGas(msg, mal) {
+  $('lecEstado').textContent = msg;
+  $('lecEstado').classList.toggle('mal', !!mal);
+}
+
+function ponerPlaceholders() {
+  const ult = lecturasGas[lecturasGas.length - 1];
+  IDS_TUBO.forEach(id => {
+    const t = datos && datos.tubos ? datos.tubos.find(x => x.id === id) : null;
+    const ref = ult ? ult.pct[id] : (t ? t.nivel : '');
+    $('lec' + id).placeholder = ref === '' ? '' : 'última: ' + pctTxt(ref);
+  });
+}
+
+function toggleRemito() { $('lecRemitoBox').style.display = $('lecTipo').value === 'despues' ? '' : 'none'; }
+
+function leerFormLectura() {
+  const pct = {};
+  let ok = !!$('lecFecha').value;
+  IDS_TUBO.forEach(id => {
+    const v = parseFloat($('lec' + id).value);
+    pct[id] = v;
+    if (!isFinite(v) || v < 0 || v > 100) ok = false;
+  });
+  const tipo = $('lecTipo').value;
+  return {
+    ok,
+    l: { ID: 'L' + Date.now(), fh: `${$('lecFecha').value} ${$('lecHora').value || '00:00'}`, tipo, pct,
+         remito: tipo === 'despues' ? (Number($('lecRemito').value) || 0) : 0, notas: $('lecNotas').value.trim(), local: false }
+  };
+}
+
+function pintarPreview() {
+  const { ok, l } = leerFormLectura();
+  const p = $('lecPreview');
+  if (!ok) { p.textContent = ''; return; }
+  let txt = `En los tres tubos hay ${num(stockKg(l))} kg de propano (${num(stockLitros(l))} L).`;
+  const it = intervalosGas(ordenarLecturas([...lecturasGas, l])).find(x => x.hasta === l);
+  if (it && !it.carga) txt += ` Desde la lectura del ${fechaLegible(it.desde.fh)} se consumieron ${num(it.kg)} kg.`;
+  if (it && it.carga && it.desde.tipo === 'antes') txt += ` Según los relojes la carga fue de ${num(it.cargaRelojKg)} kg.`;
+  if (it && it.avisos.length) txt += ' ' + it.avisos.join(' ');
+  p.textContent = txt;
+}
+
+function pintarLecturas() {
+  if (!lecturasGas.length) {
+    $('gasLecturas').innerHTML = '<p class="vacio">Todavía no hay lecturas. Cargá la primera arriba: desde ahí empieza el conteo.</p>';
+    return;
+  }
+  const porHasta = new Map(intervalosGas(lecturasGas).map(it => [it.hasta.ID, it]));
+  $('gasLecturas').innerHTML = `<div class="tabla-scroll"><table>
+    <thead><tr><th>Fecha y hora</th><th>Momento</th><th>Tubo 1</th><th>Tubo 2</th><th>Tubo 3</th><th>Propano en tubos (kg)</th><th>Consumo desde la anterior (kg)</th><th>Control</th><th>Notas</th><th></th></tr></thead>
+    <tbody>${[...lecturasGas].reverse().map(l => {
+      const it = porHasta.get(l.ID);
+      let cons = '—', ctrl = '';
+      if (it) {
+        if (it.carga) {
+          if (it.desde.tipo === 'antes') {
+            const dif = it.cargaRelojKg - it.cargaRemitoKg;
+            ctrl = `Remito ${num(it.cargaRemitoKg)} kg · reloj ${num(it.cargaRelojKg)} kg (${dif >= 0 ? '+' : '−'}${num(Math.abs(dif))})`;
+          } else if (it.kg) cons = num(it.kg);
+        } else cons = num(it.kg);
+        if (it.avisos.length) ctrl += (ctrl ? '<br>' : '') + `<span class="alerta">${it.avisos.join(' ')}</span>`;
+      }
+      return `<tr>
+        <td>${fechaLegible(l.fh)}${l.local ? '<br><span class="alerta">solo en este equipo</span>' : ''}</td>
+        <td>${TIPOS_LECTURA[l.tipo]}</td>
+        <td>${pctTxt(l.pct.T1)}%</td><td>${pctTxt(l.pct.T2)}%</td><td>${pctTxt(l.pct.T3)}%</td>
+        <td>${num(stockKg(l))}</td>
+        <td>${cons}</td>
+        <td class="izq">${ctrl}</td>
+        <td class="izq">${l.notas.replace(/</g, '&lt;')}</td>
+        <td><button class="mini" data-borrar-lect="${l.ID}">Borrar</button></td>
+      </tr>`;
+    }).join('')}</tbody></table></div>`;
+  $('gasLecturas').querySelectorAll('[data-borrar-lect]').forEach(btn => {
+    btn.onclick = () => borrarLectura(btn.dataset.borrarLect);
+  });
+}
+
+function refrescarGas() {
+  aplicarLecturasATubos(datos);
+  pintarTodo();
+  ponerPlaceholders();
+  pintarPreview();
+  pintarLecturas();
+  pintarGasTabla(gasCache, pasadasCache);
+}
+
+async function subirPendientes() {
+  for (const l of lecturasGas.filter(x => x.local)) {
+    const res = await postSheet('LecturasGas', 'upsert', filaDeLectura(l), 'ID');
+    if (subidaOk(res)) { l.local = false; quitarPendiente(l.ID); }
+  }
+  const quedan = lecturasGas.filter(x => x.local).length;
+  if (quedan) estadoGas(`Hay ${quedan} lectura${quedan > 1 ? 's' : ''} guardada${quedan > 1 ? 's' : ''} solo en este equipo: la pestaña LecturasGas de la Sheet no respondió. Se reintenta cada vez que abrís esta pantalla.`, true);
+}
+
+async function guardarLectura() {
+  const { ok, l } = leerFormLectura();
+  if (!ok) { estadoGas('Falta la fecha o el porcentaje de algún tubo (entre 0 y 100).', true); return; }
+  if (l.tipo === 'despues' && !(l.remito > 0)) { estadoGas('Después de la carga, anotá los kg que dice el remito del camión.', true); return; }
+  if (IDS_TUBO.some(id => l.pct[id] > 90) && !confirm('Algún tubo marca más de 90%. Los tubos se llenan hasta el 85% aproximadamente. ¿Está bien la lectura?')) return;
+  $('lecGuardar').disabled = true;
+  const res = await postSheet('LecturasGas', 'upsert', filaDeLectura(l), 'ID');
+  if (subidaOk(res)) {
+    estadoGas('Lectura guardada en la Sheet.');
+  } else {
+    l.local = true;
+    guardarPendiente(l);
+    estadoGas('No pude escribir en la pestaña LecturasGas de la Sheet. La lectura quedó guardada en este equipo y se reintenta cuando abras esta pantalla de nuevo.', true);
+  }
+  $('lecGuardar').disabled = false;
+  lecturasGas = ordenarLecturas([...lecturasGas, l]);
+  anotar(`Lectura de gas del ${fechaLegible(l.fh)}: ${IDS_TUBO.map(id => pctTxt(l.pct[id]) + '%').join(' · ')}`);
+  IDS_TUBO.forEach(id => { $('lec' + id).value = ''; });
+  $('lecTipo').value = 'lectura'; $('lecRemito').value = ''; $('lecNotas').value = '';
+  toggleRemito();
+  refrescarGas();
+}
+
+async function borrarLectura(id) {
+  const l = lecturasGas.find(x => x.ID === id);
+  if (!l || !confirm(`¿Borrar la lectura del ${fechaLegible(l.fh)}?`)) return;
+  if (l.local) quitarPendiente(id);
+  else {
+    const res = await postSheet('LecturasGas', 'delete', { ID: id }, 'ID');
+    if (!subidaOk(res)) { estadoGas('No se pudo borrar de la Sheet. Probá de nuevo.', true); return; }
+  }
+  lecturasGas = lecturasGas.filter(x => x.ID !== id);
+  anotar('Lectura de gas borrada');
+  refrescarGas();
+}
+
+async function abrirGas() {
+  $('gasTabla').innerHTML = '<p class="vacio">Cargando…</p>';
+  $('gasLecturas').innerHTML = '';
+  document.getElementById('modalGas').classList.add('abierto');
+  $('lecFecha').value = hoyLocal();
+  $('lecHora').value = horaLocal();
+  $('gasMes').value = hoyLocal().slice(0, 7);
+  $('parDens').value = DENSIDAD_GAS;
+  IDS_TUBO.forEach(id => { $('parL' + id.slice(1)).value = TUBOS_GAS[id].litros; });
+  estadoGas('');
+  toggleRemito();
+  const remoto = await fetchSheet();
+  if (remoto) {
+    cargarLecturasGas(remoto);
+    gasCache = remoto.ConsumoGas || [];
+    pasadasCache = remoto.PasadasSecado || [];
+  }
+  await subirPendientes();
+  refrescarGas();
+}
+
+function pintarGasTabla(gasFilas, pasadas) {
+  const listasPorMes = tnListasPorMes(pasadas);
+  const puntosPorMes = tnPuntosPorMes(pasadas);
+  const relojes = resumenPorMes(lecturasGas);
+  const meses = [...new Set([...gasFilas.map(g => g.Mes), ...Object.keys(listasPorMes), ...Object.keys(relojes)])].filter(Boolean).sort().reverse();
+
+  if (!meses.length) {
+    $('gasTabla').innerHTML = '<p class="vacio">Todavía no hay datos. Cargá una lectura de los relojes.</p>';
+    return;
+  }
+
+  $('gasTabla').innerHTML = `<div class="tabla-scroll">
+    <table>
+      <thead><tr><th>Mes</th><th>Relojes (kg)</th><th>Balance con remitos (kg)</th><th>Tn listas para puerto</th><th>Kg gas / tn</th><th>Kg gas / tn·punto</th><th>Consumo factura</th><th>Tarifa ($)</th><th>Costo ($)</th><th>Costo / tn ($)</th><th>Notas</th><th></th><th></th></tr></thead>
+      <tbody>
+        ${meses.map(mes => {
+          const fila = gasFilas.find(g => g.Mes === mes);
+          const consumo = fila ? Number(fila.Consumo_m3_o_litros) : '';
+          const tarifa = fila ? Number(fila.Tarifa) : '';
+          const notas = fila ? (fila.Notas || '') : '';
+          const listo = listasPorMes[mes] || 0;
+          const r = relojes[mes];
+          const relojKg = r && r.intervalos ? r.relojKg : null;
+          const balance = r && r.balanceKg !== null ? r.balanceKg : null;
+          const kgTn = (relojKg && listo) ? num(relojKg / listo, 2) : '—';
+          const kgTnPunto = (relojKg && puntosPorMes[mes]) ? num(relojKg / puntosPorMes[mes], 2) : '—';
+          const costo = (consumo && tarifa) ? consumo * tarifa : 0;
+          const costoTn = (costo && listo) ? (costo / listo).toFixed(2) : '—';
+          return `
+            <tr data-mes="${mes}" data-listo="${listo}">
+              <td>${mes}</td>
+              <td style="text-align:right;">${relojKg !== null ? '<b>' + num(relojKg) + '</b>' : '—'}${r && r.avisos ? ' <span class="alerta" title="Hay tramos con avisos: mirá la tabla de lecturas">⚠</span>' : ''}</td>
+              <td style="text-align:right;">${balance !== null ? num(balance) : '—'}</td>
+              <td>${num(listo, 2)} tn</td>
+              <td><b>${kgTn}</b></td>
+              <td>${kgTnPunto}</td>
+              <td><input type="number" step="0.01" value="${consumo}" data-role="consumo" style="width:90px;padding:4px 6px;border:1px solid var(--linea);font:inherit;"></td>
+              <td><input type="number" step="0.01" value="${tarifa}" data-role="tarifa" style="width:90px;padding:4px 6px;border:1px solid var(--linea);font:inherit;"></td>
+              <td data-role="costo">${costo ? '$' + num(costo, 2) : '—'}</td>
+              <td data-role="costoTn">${costoTn === '—' ? '—' : '$' + costoTn}</td>
+              <td class="izq"><input type="text" value="${String(notas).replace(/"/g, '&quot;')}" data-role="notas" style="width:120px;padding:4px 6px;border:1px solid var(--linea);font:inherit;"></td>
+              <td><button class="mini" data-role="guardarGasFila">Guardar cambios</button></td>
+              <td><button class="mini" data-role="borrarGasFila">Borrar</button></td>
+            </tr>`;
+        }).join('')}
+      </tbody>
+    </table></div>`;
+  $('gasTabla').querySelectorAll('tr[data-mes]').forEach(tr => {
+    const recalc = () => {
+      const listo = Number(tr.dataset.listo) || 0;
+      const consumo = Number(tr.querySelector('[data-role="consumo"]').value) || 0;
+      const tarifa = Number(tr.querySelector('[data-role="tarifa"]').value) || 0;
+      const costo = consumo * tarifa;
+      const costoTn = (costo && listo) ? (costo / listo).toFixed(2) : '—';
+      tr.querySelector('[data-role="costo"]').textContent = costo ? '$' + num(costo, 2) : '—';
+      tr.querySelector('[data-role="costoTn"]').textContent = costoTn === '—' ? '—' : '$' + costoTn;
+    };
+    tr.querySelector('[data-role="consumo"]').addEventListener('input', recalc);
+    tr.querySelector('[data-role="tarifa"]').addEventListener('input', recalc);
+  });
+
+  $('gasTabla').querySelectorAll('[data-role="guardarGasFila"]').forEach(btn => {
+    btn.onclick = async () => {
+      const tr = btn.closest('tr');
+      const mes = tr.dataset.mes;
+      const consumo = Number(tr.querySelector('[data-role="consumo"]').value) || 0;
+      const tarifa = Number(tr.querySelector('[data-role="tarifa"]').value) || 0;
+      const notas = tr.querySelector('[data-role="notas"]').value;
+      await postSheet('ConsumoGas', 'upsert', { Mes: mes, Consumo_m3_o_litros: consumo, Tarifa: tarifa, Notas: notas }, 'Mes');
+      anotar(`Consumo de gas de ${mes} actualizado`);
+      const remoto = await fetchSheet();
+      if (remoto) { gasCache = remoto.ConsumoGas || []; pasadasCache = remoto.PasadasSecado || []; }
+      pintarGasTabla(gasCache, pasadasCache);
+    };
+  });
+
+  $('gasTabla').querySelectorAll('[data-role="borrarGasFila"]').forEach(btn => {
+    btn.onclick = async () => {
+      const tr = btn.closest('tr');
+      const mes = tr.dataset.mes;
+      if (!confirm(`¿Borrar los datos de factura de ${mes}?`)) return;
+      const res = await postSheet('ConsumoGas', 'delete', { Mes: mes }, 'Mes');
+      if (res && res.ok) {
+        anotar(`Datos de factura de ${mes} borrados`);
+      } else {
+        anotar('No se pudo borrar (puede que ya se haya borrado)');
+      }
+      const remoto = await fetchSheet();
+      if (remoto) { gasCache = remoto.ConsumoGas || []; pasadasCache = remoto.PasadasSecado || []; }
+      pintarGasTabla(gasCache, pasadasCache);
+    };
+  });
+}
+
+/* eventos de la pantalla de gas */
+['lecFecha', 'lecHora', 'lecTipo', 'lecT1', 'lecT2', 'lecT3', 'lecRemito'].forEach(id => {
+  $(id).addEventListener('input', pintarPreview);
+  $(id).addEventListener('change', () => { toggleRemito(); pintarPreview(); });
+});
+$('lecGuardar').onclick = guardarLectura;
+$('parGuardar').onclick = () => {
+  const dens = parseFloat($('parDens').value);
+  const litros = {};
+  IDS_TUBO.forEach(id => { litros[id] = parseFloat($('parL' + id.slice(1)).value); });
+  if (!(dens > 0.4 && dens < 0.65) || IDS_TUBO.some(id => !(litros[id] > 0))) {
+    estadoGas('Revisá los valores: la densidad del propano líquido ronda 0,51 kg/L y los litros tienen que ser mayores a cero.', true);
+    return;
+  }
+  DENSIDAD_GAS = dens;
+  IDS_TUBO.forEach(id => { TUBOS_GAS[id].litros = litros[id]; });
+  lsGuardar(LS_PARAMS, { dens, litros });
+  estadoGas('Parámetros guardados en este equipo.');
+  refrescarGas();
+};
+
+$('gasGuardar').onclick = async () => {
+  const mes = $('gasMes').value;
+  const consumo = Number($('gasConsumo').value);
+  const tarifa = Number($('gasTarifa').value) || 0;
+  const notas = $('gasNotas').value;
+  if (!mes || !consumo) { anotar('Falta el mes o el consumo de gas'); return; }
+  await postSheet('ConsumoGas', 'upsert', { Mes: mes, Consumo_m3_o_litros: consumo, Tarifa: tarifa, Notas: notas }, 'Mes');
+  $('gasConsumo').value = '';
+  $('gasTarifa').value = '';
+  $('gasNotas').value = '';
+  anotar(`Consumo de gas de ${mes} guardado`);
+  const remoto = await fetchSheet();
+  pintarGasTabla((remoto && remoto.ConsumoGas) || [], (remoto && remoto.PasadasSecado) || []);
+};
+
+/* jornada guionada */
+const GUION = [
+  { t: 300,  f: () => { reloj = 7 * 60 + 30; anotar('Arranca la jornada'); pintarTodo(); } },
+  { t: 1500, f: () => opIngreso(5) },
+  { t: 2600, f: () => opSecar(3, 18.4, 15.8) },
+  { t: 2600, f: () => opIngreso(4) },
+  { t: 2600, f: () => opSecar(4, 18.1, 15.5) },
+  { t: 2800, f: () => opRepaso(3) },
+  { t: 2000, f: () => { marcarPrevio(1); anotar('Cambian al silo previo 1'); pintarTodo(); } },
+  { t: 2600, f: () => { anotar('Se corta el repaso: hay que descargar camiones'); pintarTodo(); } },
+  { t: 2400, f: () => opIngreso(4) },
+  { t: 3000, f: () => opSecar(5, 16.0, 14.5) },
+  { t: 2600, f: () => { anotar('Cierre del día'); pintarTodo(); } }
+];
+
+let corriendo = false;
+$('opJornada').onclick = async () => {
+  if (corriendo) return;
+  corriendo = true;
+  $('opJornada').disabled = true;
+  cargarPlanta('monaco');
+  await new Promise(r => setTimeout(r, 400));
+  for (const paso of GUION) {
+    paso.f();
+    await new Promise(r => setTimeout(r, paso.t));
+  }
+  corriendo = false;
+  $('opJornada').disabled = false;
+};
+
+/* ============================================================
+   BUCLE
+   ============================================================ */
+
+function animar() {
+  requestAnimationFrame(animar);
+  let cambio = false;
+  items.forEach(it => {
+    if (it.tipo === 'silo') {
+      const obj = it.dato.chapas;
+      if (Math.abs(it.visual - obj) > 0.004) {
+        it.visual += (obj - it.visual) * 0.09;
+        refrescarSilo(it); cambio = true;
+      } else if (it.visual !== obj) { it.visual = obj; refrescarSilo(it); }
+    } else if (it.tipo === 'tubo') {
+      const obj = it.dato.nivel;
+      if (Math.abs(it.visual - obj) > 0.05) { it.visual += (obj - it.visual) * 0.08; refrescarTubo(it); cambio = true; }
+    } else if (it.tipo === 'bolsa') {
+      const obj = it.dato.metros;
+      if (Math.abs(it.visual - obj) > 0.05) { it.visual += (obj - it.visual) * 0.08; refrescarBolsa(it); cambio = true; }
+    }
+  });
+  if (cambio && secadoraMesh) {
+    secadoraMesh.material.color.setHex(0x9A7C55);
+  } else if (secadoraMesh) {
+    secadoraMesh.material.color.setHex(0x8A8074);
+  }
+  render.render(escena, camara);
+}
+
+(async function iniciar() {
+  cubicajeRemoto = await fetchSheet();
+  pasadasCache = (cubicajeRemoto && cubicajeRemoto.PasadasSecado) || [];
+  gasCache = (cubicajeRemoto && cubicajeRemoto.ConsumoGas) || [];
+  cargarParamsGas();
+  cargarLecturasGas(cubicajeRemoto);
+  aplicarDatosSilosRemoto();
+  cargarPlanta('monaco');
+  pintarPaso();
+  reflejarCopetePrevio();
+  refrescarSelectCereal();
+  animar();
+})();
+</script>
+
+<!-- Logo de Cereales Lobería (una sola copia, se aplica a todos los lugares marcados con data-logo) -->
+<script>
+const LOGO_SRC = "data:image/png;base64,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";
+document.querySelectorAll("img[data-logo]").forEach(i => i.src = LOGO_SRC);
+/* app instalable: el service worker guarda la app para abrirla sin señal (solo funciona desde https) */
+if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(e => console.warn("Sin service worker", e)));
+}
+</script>
