@@ -3063,6 +3063,27 @@ function pintarGasTabla(pasadas) {
       : (facturasGas.length ? 'Para ver costos en dólares, cargá el tipo de cambio en las facturas.' : 'Para ver costos, cargá la factura de al menos una carga del camión.')}${faltaTC && enDolares ? ' Hay facturas sin tipo de cambio: completalo para que el costo en dólares sea exacto.' : ''}</p>`;
 }
 
+/* eventos de la pantalla de gas (lecturas y parámetros de los tubos) */
+['lecFecha', 'lecHora', 'lecTipo', 'lecT1', 'lecT2', 'lecT3', 'lecRemito'].forEach(id => {
+  $(id).addEventListener('input', pintarPreview);
+  $(id).addEventListener('change', () => { toggleRemito(); pintarPreview(); });
+});
+$('lecGuardar').onclick = guardarLectura;
+$('parGuardar').onclick = () => {
+  const dens = parseFloat($('parDens').value);
+  const litros = {};
+  IDS_TUBO.forEach(id => { litros[id] = parseFloat($('parL' + id.slice(1)).value); });
+  if (!(dens > 0.4 && dens < 0.65) || IDS_TUBO.some(id => !(litros[id] > 0))) {
+    estadoGas('Revisá los valores: la densidad del propano líquido ronda 0,51 kg/L y los litros tienen que ser mayores a cero.', true);
+    return;
+  }
+  DENSIDAD_GAS = dens;
+  IDS_TUBO.forEach(id => { TUBOS_GAS[id].litros = litros[id]; });
+  lsGuardar(LS_PARAMS, { dens, litros });
+  estadoGas('Parámetros guardados en este equipo.');
+  refrescarGas();
+};
+
 /* eventos de facturas */
 $('facCarga').addEventListener('change', completarDesdeCarga);
 ['facKg', 'facImporte', 'facTC'].forEach(id => $(id).addEventListener('input', pintarPreviewFactura));
