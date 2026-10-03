@@ -505,6 +505,7 @@
         <input type="text" id="lecNotas" style="width:150px;">
       </label>
       <button class="fuerte" id="lecGuardar">Guardar lectura</button>
+      <button class="mini" id="lecCancelarEdicion" hidden>Cancelar corrección</button>
     </div>
     <p class="gas-preview" id="lecPreview"></p>
     <p class="gas-estado" id="lecEstado"></p>
@@ -2543,6 +2544,7 @@ const TIPOS_LECTURA = { lectura: 'Lectura común', antes: 'Antes de la carga', d
 const RANGO_TIPO = { antes: 0, lectura: 1, despues: 2 };
 const MESES_NOMBRE = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 let lecturasGas = [];
+let editandoLectura = null;   /* ID de la lectura que se está corrigiendo, o null si es una nueva */
 
 const lsLeer = (k, def) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch (e) { return def; } };
 const lsGuardar = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } };
@@ -2777,11 +2779,14 @@ function pintarLecturas() {
         <td>${cons}</td>
         <td class="izq">${ctrl}</td>
         <td class="izq">${l.notas.replace(/</g, '&lt;')}</td>
-        <td><button class="mini" data-borrar-lect="${l.ID}">Borrar</button></td>
+        <td class="solo-pantalla" style="white-space:nowrap;"><button class="mini" data-editar-lect="${l.ID}">Editar</button> <button class="mini" data-borrar-lect="${l.ID}">Borrar</button></td>
       </tr>`;
     }).join('')}</tbody></table></div>`;
   $('gasLecturas').querySelectorAll('[data-borrar-lect]').forEach(btn => {
     btn.onclick = () => borrarLectura(btn.dataset.borrarLect);
+  });
+  $('gasLecturas').querySelectorAll('[data-editar-lect]').forEach(btn => {
+    btn.onclick = () => editarLectura(btn.dataset.editarLect);
   });
   $('gasLecturas').querySelectorAll('[data-elegir-pas]').forEach(btn => {
     btn.onclick = () => abrirElegirPasadas(btn.dataset.elegirPas);
@@ -2808,23 +2813,39 @@ function abrirElegirPasadas(id) {
     <div class="gas-form"><button class="fuerte" id="elegirGuardar">Guardar</button><button class="mini" id="elegirAuto">Volver a automático (por fecha)</button><button class="mini" id="elegirCerrar">Cancelar</button></div>
     <p class="gas-estado" id="elegirEstado"></p>`;
   if (caja.scrollIntoView) caja.scrollIntoView({ block: 'nearest' });
+  const estado = (msg, mal) => { $('elegirEstado').textContent = msg; $('elegirEstado').classList.toggle('mal', !!mal); };
+  const botones = on => ['elegirGuardar', 'elegirAuto', 'elegirCerrar'].forEach(b => { if ($(b)) $(b).disabled = !on; });
   const guardar = async lista => {
     const antes = l.pasadas;
-    l.pasadas = lista;
-    const res = await postSheet('LecturasGas', 'upsert', filaDeLectura(l), 'ID');
-    if (!subidaOk(res)) { l.pasadas = antes; $('elegirEstado').textContent = 'No se pudo guardar en la Sheet. Probá de nuevo.'; $('elegirEstado').classList.add('mal'); return; }
-    /* si la pestaña no tiene la columna Pasadas, el script descarta el dato sin avisar: se verifica */
-    const remoto = await fetchSheet();
-    const fila = remoto && (remoto.LecturasGas || []).find(r => String(r.ID) === id);
-    if (lista.length && fila && !String(fila.Pasadas || '').trim()) {
-      $('elegirEstado').textContent = 'La Sheet no guardó la elección: agregá el encabezado "Pasadas" en la columna I de la pestaña LecturasGas y volvé a intentar.';
-      $('elegirEstado').classList.add('mal');
+    botones(false);
+    estado('Guardando en la Sheet… puede tardar unos segundos.');
+    try {
+      l.pasadas = lista;
+      const res = await postSheet('LecturasGas', 'upsert', filaDeLectura(l), 'ID');
+      if (!subidaOk(res)) {
+        l.pasadas = antes;
+        estado('No se pudo guardar en la Sheet' + (res && res.error ? ` (respuesta: ${res.error})` : ' (sin respuesta: revisá la conexión)') + '.', true);
+        return;
+      }
+      /* si la pestaña no tiene la columna Pasadas, el script descarta el dato sin avisar: se verifica */
+      estado('Guardado. Verificando…');
+      const remoto = await fetchSheet();
+      const fila = remoto && (remoto.LecturasGas || []).find(r => String(r.ID) === String(id));
+      if (lista.length && fila && !String(fila.Pasadas || '').trim()) {
+        l.pasadas = antes;
+        estado('La Sheet recibió la lectura pero no guardó la elección: falta el encabezado "Pasadas" en la pestaña LecturasGas (fila 1, a la derecha de "Notas"). Agregalo, escrito exactamente así, y volvé a tocar Guardar.', true);
+        return;
+      }
+      if (remoto) { cargarLecturasGas(remoto); pasadasCache = remoto.PasadasSecado || pasadasCache; }
+      caja.hidden = true;
+      anotar('Pasadas del tramo de gas actualizadas');
+      refrescarGas();
+    } catch (e) {
       l.pasadas = antes;
-      return;
+      estado('Error al guardar: ' + (e && e.message ? e.message : e), true);
+    } finally {
+      botones(true);
     }
-    caja.hidden = true;
-    anotar('Pasadas del tramo de gas actualizadas');
-    refrescarGas();
   };
   $('elegirGuardar').onclick = () => guardar([...caja.querySelectorAll('input[data-k]:checked')].map(c => clavePasada(candidatas[+c.dataset.k])));
   $('elegirAuto').onclick = () => guardar([]);
@@ -2888,22 +2909,52 @@ async function guardarLectura() {
   if (!ok) { estadoGas('Falta la fecha o el porcentaje de algún tubo (entre 0 y 100).', true); return; }
   if (l.tipo === 'despues' && !(l.remito > 0)) { estadoGas('Después de la carga, anotá los kg que dice el remito del camión.', true); return; }
   if (IDS_TUBO.some(id => l.pct[id] > 90) && !confirm('Algún tubo marca más de 90%. Los tubos se llenan hasta el 85% aproximadamente. ¿Está bien la lectura?')) return;
+  const original = editandoLectura ? lecturasGas.find(x => x.ID === editandoLectura) : null;
+  if (original) { l.ID = original.ID; l.pasadas = original.pasadas || []; }
   $('lecGuardar').disabled = true;
   const res = await postSheet('LecturasGas', 'upsert', filaDeLectura(l), 'ID');
   if (subidaOk(res)) {
-    estadoGas('Lectura guardada en la Sheet.');
+    estadoGas(original ? 'Lectura corregida en la Sheet.' : 'Lectura guardada en la Sheet.');
+    if (original && original.local) quitarPendiente(original.ID);
   } else {
     l.local = true;
     guardarPendiente(l);
     estadoGas('No pude escribir en la pestaña LecturasGas de la Sheet. La lectura quedó guardada en este equipo y se reintenta cuando abras esta pantalla de nuevo.', true);
   }
   $('lecGuardar').disabled = false;
-  lecturasGas = ordenarLecturas([...lecturasGas, l]);
-  anotar(`Lectura de gas del ${fechaLegible(l.fh)}: ${IDS_TUBO.map(id => pctTxt(l.pct[id]) + '%').join(' · ')}`);
+  lecturasGas = ordenarLecturas([...lecturasGas.filter(x => x.ID !== l.ID), l]);
+  anotar(`Lectura de gas del ${fechaLegible(l.fh)} ${original ? 'corregida' : 'guardada'}: ${IDS_TUBO.map(id => pctTxt(l.pct[id]) + '%').join(' · ')}`);
+  terminarEdicionLectura();
+  refrescarGas();
+}
+
+/* corregir una lectura ya cargada: se pasa al formulario de arriba y se guarda con el mismo ID */
+function editarLectura(id) {
+  const l = lecturasGas.find(x => x.ID === id);
+  if (!l) return;
+  editandoLectura = id;
+  $('lecFecha').value = l.fh.slice(0, 10);
+  $('lecHora').value = l.fh.slice(11, 16);
+  $('lecTipo').value = l.tipo;
+  IDS_TUBO.forEach(t => { $('lec' + t).value = l.pct[t]; });
+  $('lecRemito').value = l.remito || '';
+  $('lecNotas').value = l.notas || '';
+  toggleRemito();
+  $('lecGuardar').textContent = 'Guardar cambios';
+  $('lecCancelarEdicion').hidden = false;
+  estadoGas(`Corrigiendo la lectura del ${fechaLegible(l.fh)}. Cambiá lo que haga falta y tocá "Guardar cambios".`);
+  pintarPreview();
+  const f = $('lecGuardar').closest('.gas-form');
+  if (f && f.scrollIntoView) f.scrollIntoView({ block: 'nearest' });
+}
+function terminarEdicionLectura() {
+  editandoLectura = null;
   IDS_TUBO.forEach(id => { $('lec' + id).value = ''; });
   $('lecTipo').value = 'lectura'; $('lecRemito').value = ''; $('lecNotas').value = '';
+  $('lecFecha').value = hoyLocal(); $('lecHora').value = horaLocal();
+  $('lecGuardar').textContent = 'Guardar lectura';
+  $('lecCancelarEdicion').hidden = true;
   toggleRemito();
-  refrescarGas();
 }
 
 async function borrarLectura(id) {
@@ -2923,8 +2974,7 @@ async function abrirGas() {
   $('gasTabla').innerHTML = '<p class="vacio">Cargando…</p>';
   $('gasLecturas').innerHTML = '';
   document.getElementById('modalGas').classList.add('abierto');
-  $('lecFecha').value = hoyLocal();
-  $('lecHora').value = horaLocal();
+  terminarEdicionLectura();
   $('facFecha').value = hoyLocal();
   estadoFactura('');
   $('parDens').value = DENSIDAD_GAS;
@@ -3208,6 +3258,7 @@ function pintarGasTabla(pasadas) {
   $(id).addEventListener('change', () => { toggleRemito(); pintarPreview(); });
 });
 $('lecGuardar').onclick = guardarLectura;
+$('lecCancelarEdicion').onclick = () => { terminarEdicionLectura(); estadoGas(''); pintarPreview(); };
 $('parGuardar').onclick = () => {
   const dens = parseFloat($('parDens').value);
   const litros = {};
