@@ -550,6 +550,7 @@
 
     <h3 class="gas-h">Lecturas cargadas</h3>
     <div id="gasLecturas"></div>
+    <div id="elegirPasadas" class="gas-detalle solo-pantalla" hidden></div>
 
     <p class="pie">Los costos se muestran en dólares: cada factura se pasa a US$ con el tipo de cambio que cargues en ella, y en pesos para controlar contra las facturas. El costo del gas consumido se calcula con el precio promedio del gas que hay en los tubos: cada carga se mezcla con lo que había, a su precio de factura (importe neto ÷ kg facturados). El gas que ya estaba antes de la primera carga registrada se valoriza al precio de esa primera factura. Un costo marcado con * es provisorio: hay una carga sin factura y se usó el último precio conocido. Los kg salen de: puntos de % × litros del tubo × densidad del propano. El reloj tiene un error de 1 o 2 puntos, así que conviene mirar el mes y no una lectura suelta. "Balance con remitos" es lo que había en los tubos al empezar, más los kg de los remitos, menos lo que quedó al final: si se aleja mucho de "Relojes", hay un reloj mal leído o una carga sin anotar. Las toneladas listas son las de las pasadas con humedad de salida dentro de la tolerancia.</p>
 
@@ -2571,12 +2572,13 @@ function normLectura(r) {
   return {
     ID: String(r.ID || ''), fh: normFechaHora(r.FechaHora), tipo: normTipo(r.Tipo),
     pct: { T1: parseFloat(r.T1_pct), T2: parseFloat(r.T2_pct), T3: parseFloat(r.T3_pct) },
-    remito: Number(r.KgRemito) || 0, notas: r.Notas ? String(r.Notas) : '', local: false
+    remito: Number(r.KgRemito) || 0, notas: r.Notas ? String(r.Notas) : '', local: false,
+    pasadas: String(r.Pasadas || '').split(';').map(x => x.trim()).filter(Boolean)
   };
 }
 const lecturaValida = l => l.ID && l.fh && IDS_TUBO.every(id => isFinite(l.pct[id]));
 function filaDeLectura(l) {
-  return { ID: l.ID, FechaHora: l.fh, Tipo: TIPOS_LECTURA[l.tipo], T1_pct: l.pct.T1, T2_pct: l.pct.T2, T3_pct: l.pct.T3, KgRemito: l.remito || '', Notas: l.notas };
+  return { ID: l.ID, FechaHora: l.fh, Tipo: TIPOS_LECTURA[l.tipo], T1_pct: l.pct.T1, T2_pct: l.pct.T2, T3_pct: l.pct.T3, KgRemito: l.remito || '', Notas: l.notas, Pasadas: (l.pasadas || []).join(';') };
 }
 const ordenarLecturas = arr => arr.sort((a, b) => a.fh.localeCompare(b.fh) || RANGO_TIPO[a.tipo] - RANGO_TIPO[b.tipo] || a.ID.localeCompare(b.ID));
 
@@ -2722,7 +2724,7 @@ function leerFormLectura() {
   return {
     ok,
     l: { ID: 'L' + Date.now(), fh: `${$('lecFecha').value} ${$('lecHora').value || '00:00'}`, tipo, pct,
-         remito: tipo === 'despues' ? (Number($('lecRemito').value) || 0) : 0, notas: $('lecNotas').value.trim(), local: false }
+         remito: tipo === 'despues' ? (Number($('lecRemito').value) || 0) : 0, notas: $('lecNotas').value.trim(), local: false, pasadas: [] }
   };
 }
 
@@ -2744,7 +2746,9 @@ function pintarLecturas() {
     return;
   }
   const porHasta = new Map(intervalosGas(lecturasGas).map(it => [it.hasta.ID, it]));
-  const tramosSinPasada = new Set(gasPorPasada(pasadasCache, lecturasGas, facturasGas).sinPasada.map(x => x.hastaID));
+  const asig = gasPorPasada(pasadasCache, lecturasGas, facturasGas);
+  const tramosSinPasada = new Set(asig.sinPasada.map(x => x.hastaID));
+  const txtPasada = p => `${p.Cereal || ''} ${p.Chapas || ''} ch. (${String(p.Fecha || '').slice(8, 10)}/${String(p.Fecha || '').slice(5, 7)})`;
   $('gasLecturas').innerHTML = `<div class="tabla-scroll"><table>
     <thead><tr><th>Fecha y hora</th><th>Momento</th><th>Tubo 1</th><th>Tubo 2</th><th>Tubo 3</th><th>Propano en tubos (kg)</th><th>Consumo desde la anterior (kg)</th><th>Control</th><th>Notas</th><th></th></tr></thead>
     <tbody>${[...lecturasGas].reverse().map(l => {
@@ -2758,7 +2762,12 @@ function pintarLecturas() {
           } else if (it.kg) cons = num(it.kg);
         } else cons = num(it.kg);
         if (it.avisos.length) ctrl += (ctrl ? '<br>' : '') + `<span class="alerta">${it.avisos.join(' ')}</span>`;
-        if (tramosSinPasada.has(l.ID)) ctrl += (ctrl ? '<br>' : '') + '<span class="alerta">Sin pasada registrada en este tramo</span>';
+        if (!it.carga && it.kg > 0) {
+          const ps = asig.tramoDePasada[l.ID] || [];
+          const quien = tramosSinPasada.has(l.ID) ? '<span class="alerta">Sin pasada registrada en este tramo</span>'
+            : 'Pasadas: ' + ps.map(txtPasada).join(' · ') + ((l.pasadas || []).length ? ' (elegidas a mano)' : '');
+          ctrl += (ctrl ? '<br>' : '') + quien + ` <button class="mini solo-pantalla" data-elegir-pas="${l.ID}">Elegir</button>`;
+        }
       }
       return `<tr>
         <td>${fechaLegible(l.fh)}${l.local ? '<br><span class="alerta">solo en este equipo</span>' : ''}</td>
@@ -2774,6 +2783,52 @@ function pintarLecturas() {
   $('gasLecturas').querySelectorAll('[data-borrar-lect]').forEach(btn => {
     btn.onclick = () => borrarLectura(btn.dataset.borrarLect);
   });
+  $('gasLecturas').querySelectorAll('[data-elegir-pas]').forEach(btn => {
+    btn.onclick = () => abrirElegirPasadas(btn.dataset.elegirPas);
+  });
+}
+
+/* elegir a mano qué pasadas corresponden al gas que bajó hasta esta lectura */
+function abrirElegirPasadas(id) {
+  const l = lecturasGas.find(x => x.ID === id);
+  const i = lecturasGas.indexOf(l);
+  if (!l || i < 1) return;
+  const desde = lecturasGas[i - 1];
+  const dia = f => new Date(f.slice(0, 10) + 'T00:00:00').getTime();
+  const lo = dia(desde.fh) - 3 * 864e5, hi = dia(l.fh) + 3 * 864e5;
+  const asig = gasPorPasada(pasadasCache, lecturasGas, facturasGas);
+  const actuales = new Set((asig.tramoDePasada[id] || []).map(clavePasada));
+  const candidatas = pasadasCache.filter(p => { const d = dia(String(p.Fecha || '').slice(0, 10)); return (d >= lo && d <= hi) || actuales.has(clavePasada(p)); });
+  const caja = $('elegirPasadas');
+  caja.hidden = false;
+  caja.innerHTML = `<p><b>Pasadas del tramo ${fechaLegible(desde.fh)} → ${fechaLegible(l.fh)}</b> (bajaron ${num(intervalosGas(lecturasGas).find(t => t.hasta.ID === id).kg)} kg de gas). Marcá las que se secaron entre esas dos lecturas.</p>
+    ${candidatas.length ? candidatas.map((p, k) => `<label style="display:block;margin:3px 0;"><input type="checkbox" data-k="${k}"${actuales.has(clavePasada(p)) ? ' checked' : ''}>
+      ${String(p.Fecha || '').slice(0, 10).split('-').reverse().join('/')} · ${p.Cereal || ''} · silo ${p.SiloOrigen || '—'} · ${p.Chapas || ''} chapas · ${p.Toneladas || ''} tn · ${p.Pasada || 1}° pasada</label>`).join('')
+      : '<p class="vacio">No hay pasadas registradas cerca de esas fechas.</p>'}
+    <div class="gas-form"><button class="fuerte" id="elegirGuardar">Guardar</button><button class="mini" id="elegirAuto">Volver a automático (por fecha)</button><button class="mini" id="elegirCerrar">Cancelar</button></div>
+    <p class="gas-estado" id="elegirEstado"></p>`;
+  if (caja.scrollIntoView) caja.scrollIntoView({ block: 'nearest' });
+  const guardar = async lista => {
+    const antes = l.pasadas;
+    l.pasadas = lista;
+    const res = await postSheet('LecturasGas', 'upsert', filaDeLectura(l), 'ID');
+    if (!subidaOk(res)) { l.pasadas = antes; $('elegirEstado').textContent = 'No se pudo guardar en la Sheet. Probá de nuevo.'; $('elegirEstado').classList.add('mal'); return; }
+    /* si la pestaña no tiene la columna Pasadas, el script descarta el dato sin avisar: se verifica */
+    const remoto = await fetchSheet();
+    const fila = remoto && (remoto.LecturasGas || []).find(r => String(r.ID) === id);
+    if (lista.length && fila && !String(fila.Pasadas || '').trim()) {
+      $('elegirEstado').textContent = 'La Sheet no guardó la elección: agregá el encabezado "Pasadas" en la columna I de la pestaña LecturasGas y volvé a intentar.';
+      $('elegirEstado').classList.add('mal');
+      l.pasadas = antes;
+      return;
+    }
+    caja.hidden = true;
+    anotar('Pasadas del tramo de gas actualizadas');
+    refrescarGas();
+  };
+  $('elegirGuardar').onclick = () => guardar([...caja.querySelectorAll('input[data-k]:checked')].map(c => clavePasada(candidatas[+c.dataset.k])));
+  $('elegirAuto').onclick = () => guardar([]);
+  $('elegirCerrar').onclick = () => { caja.hidden = true; };
 }
 
 function refrescarGas() {
@@ -2947,6 +3002,8 @@ function costeoGas(lects, facts, precioDe = precioFactura) {
    toneladas × puntos de humedad quitados. Las pasadas guardan solo la fecha: se ubican al mediodía.
    Si en un tramo no hay pasadas, ese gas queda aparte ("sin pasada": arranques, pruebas, olvidos). */
 const fhPasada = p => String(p.Fecha || '').slice(0, 10) + ' 12:00';
+/* las pasadas no tienen ID: se identifican por sus datos */
+const clavePasada = p => [String(p.Fecha || '').slice(0, 10), p.Cereal, p.SiloOrigen, p.Chapas, p.Pasada, p.Toneladas].map(v => String(v ?? '').trim()).join('|');
 function pesoPasada(p) {
   const tn = Number(p.Toneladas) || 0, pts = Number(p.HumedadEntrada) - Number(p.HumedadSalida);
   return pts > 0 ? tn * pts : tn;
@@ -2954,14 +3011,21 @@ function pesoPasada(p) {
 function gasPorPasada(pasadas, lects, facts) {
   const cu = costeoGas(lects, facts, precioFacturaUSD);
   const tramos = cu ? cu.tramos : intervalosGas(lects).filter(it => it.kg > 0).map(it => ({ it, costo: null, provisorio: false }));
-  const porPasada = new Map(), sinPasada = [];
+  const porPasada = new Map(), sinPasada = [], tramoDePasada = {};
+  /* una pasada asignada a mano a un tramo no se reparte por fecha en ningún otro */
+  const manuales = new Set();
+  tramos.forEach(t => (t.it.hasta.pasadas || []).forEach(k => manuales.add(k)));
   tramos.forEach(t => {
-    const dentro = (pasadas || []).filter(p => { const f = fhPasada(p); return f > t.it.desde.fh && f <= t.it.hasta.fh; });
+    const lista = t.it.hasta.pasadas || [];
+    const dentro = lista.length
+      ? (pasadas || []).filter(p => lista.includes(clavePasada(p)))
+      : (pasadas || []).filter(p => { if (manuales.has(clavePasada(p))) return false; const f = fhPasada(p); return f > t.it.desde.fh && f <= t.it.hasta.fh; });
     const total = dentro.reduce((a, p) => a + pesoPasada(p), 0);
     if (!dentro.length || !(total > 0)) {
       sinPasada.push({ mes: t.it.hasta.fh.slice(0, 7), kg: t.it.kg, costo: t.costo, hastaID: t.it.hasta.ID });
       return;
     }
+    dentro.forEach(p => { (tramoDePasada[t.it.hasta.ID] = tramoDePasada[t.it.hasta.ID] || []).push(p); });
     dentro.forEach(p => {
       const parte = pesoPasada(p) / total;
       const r = porPasada.get(p) || { kg: 0, costo: 0, provisorio: false, sinPrecio: false };
@@ -2971,7 +3035,7 @@ function gasPorPasada(pasadas, lects, facts) {
       porPasada.set(p, r);
     });
   });
-  return { porPasada, sinPasada };
+  return { porPasada, sinPasada, tramoDePasada };
 }
 
 /* ---- pantalla ---- */
