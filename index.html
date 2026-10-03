@@ -385,7 +385,7 @@
       <button class="mini" id="pasDescargar">Descargar CSV</button>
     </div>
     <div id="pasTabla"></div>
-    <p class="pie" id="pasPie">Fecha, cereal, silo previo, sentido de conteo, chapas, humedad de entrada y salida, número de pasada, silo destino, toneladas y si quedó disponible para cargar a puerto (humedad de salida ≤ tolerancia del cereal: maíz 14,5, soja 13,5, trigo y cebada 14, girasol 11). "Costo pasada" reparte el costo en dólares del gas consumido en el mes (relojes × precio de las facturas, en "Consumo de gas") entre todas las pasadas de ese mes, proporcional a cuántas toneladas pesó cada una.</p>
+    <p class="pie" id="pasPie">Fecha, cereal, silo previo, sentido de conteo, chapas, humedad de entrada y salida, número de pasada, silo destino, toneladas y si quedó disponible para cargar a puerto (humedad de salida ≤ tolerancia del cereal: maíz 14,5, soja 13,5, trigo y cebada 14, girasol 11). "Gas" y "Costo pasada" salen de las lecturas de los relojes: el gas que bajó entre dos lecturas se reparte entre las pasadas de ese tramo según toneladas × puntos de humedad quitados, y se valoriza al precio en dólares de las facturas. Una pasada sin lecturas antes y después queda sin gas. Antes se repartía por mes entre todas las pasadas de ese mes, proporcional a cuántas toneladas pesó cada una.</p>
     <div class="mandos">
       <button class="imprimir" id="pasImprimir">Imprimir</button>
       <button class="cerrar" id="pasCerrar">Cerrar</button>
@@ -511,6 +511,9 @@
 
     <h3 class="gas-h">Consumo por mes</h3>
     <div id="gasTabla"></div>
+
+    <h3 class="gas-h">Por cereal</h3>
+    <div id="gasPorCereal"></div>
 
     <h3 class="gas-h">Facturas de YPF Gas</h3>
     <p class="sub solo-pantalla" style="margin:0 0 4px;">YPF factura lo que descarga en los tubos. Cargá cada factura junto con la carga del camión que le corresponde: el precio por kg sale de ahí, y el costo del gas se calcula con lo que bajan los relojes.</p>
@@ -2195,29 +2198,26 @@ function pintarPasadasFiltradas(filas) {
     </table>
     <p class="pie" style="margin-bottom:14px;">"Tn pasadas por secadora" suma cada pasada tal cual (si algo pasó dos veces, cuenta las dos). "Tn listas para puerto" y "Tn pendientes" reparten ese mismo total según si la humedad de salida llegó o no a la tolerancia.</p>` : '';
 
-  const costosMes = costoPorMes();
-  const tnMes = tnTotalPorMes();
+  const asignacion = gasPorPasada(pasadasCache, lecturasGas, facturasGas);
 
   $('pasTabla').innerHTML = resumenHtml + `<div class="tabla-scroll">
     <table>
       <thead><tr>
         <th>Fecha</th><th>Cereal</th><th>Origen</th><th>Sentido</th><th>Chapas</th>
-        <th>H. ent.</th><th>H. sal.</th><th>Pasada</th><th>Destino</th><th>Toneladas</th><th>Puerto</th><th>Costo pasada (US$)</th><th></th>
+        <th>H. ent.</th><th>H. sal.</th><th>Pasada</th><th>Destino</th><th>Toneladas</th><th>Puerto</th><th>Gas (kg)</th><th>Costo pasada (US$)</th><th></th>
       </tr></thead>
       <tbody>
         ${filas.slice().reverse().map((p, idx) => {
-          const mes = (p.Fecha || '').slice(0, 7);
-          const costoMes = costosMes[mes] || 0;
-          const totalMes = tnMes[mes] || 0;
-          const tn = Number(p.Toneladas) || 0;
-          const cuota = (costoMes && totalMes) ? (tn / totalMes) * costoMes : 0;
+          const g = asignacion.porPasada.get(p);
+          const cuota = g && !g.sinPrecio ? g.costo : 0;
           return `
           <tr data-idx="${idx}">
             <td>${p.Fecha||''}</td><td>${p.Cereal||''}</td><td>${p.SiloOrigen||''}</td><td>${p.Sentido||''}</td>
             <td>${p.Chapas||''}</td><td>${p.HumedadEntrada||''}</td><td>${p.HumedadSalida||''}</td>
             <td>${p.Pasada||''}</td><td>${p.SiloDestino||''}</td><td><b>${p.Toneladas||''} tn</b></td>
             <td>${listaParaPuerto(p) ? 'Sí' : 'No'}</td>
-            <td>${cuota ? 'US$ ' + num(cuota, 2) : '—'}</td>
+            <td>${g ? num(g.kg) : '—'}</td>
+            <td>${cuota ? 'US$ ' + num(cuota, 2) + (g.provisorio ? ' *' : '') : '—'}</td>
             <td><button class="mini" data-role="borrarPasada">Borrar</button></td>
           </tr>`;
         }).join('')}
@@ -2635,11 +2635,16 @@ function intervalosGas(lects) {
         }
       }
     } else {
+      /* consumo neto: se suman las bajas y se restan las subidas. Si un reloj "sube" un punto sin carga
+         es error de lectura, y descartarlo inflaría el consumo. */
+      let neto = 0;
       IDS_TUBO.forEach(id => {
         const dif = a.pct[id] - b.pct[id];
-        if (dif > 0) { const kg = kgDe(id, dif); it.kg += kg; it.porTubo[id] = kg; }
+        neto += kgDe(id, dif);
+        if (dif > 0) it.porTubo[id] = kgDe(id, dif);
         else if (dif < -1.5) it.avisos.push(`El tubo ${id.slice(1)} subió ${num(-dif, 1)} puntos sin una carga anotada.`);
       });
+      it.kg = Math.max(0, neto);
     }
     out.push(it);
   }
@@ -2739,6 +2744,7 @@ function pintarLecturas() {
     return;
   }
   const porHasta = new Map(intervalosGas(lecturasGas).map(it => [it.hasta.ID, it]));
+  const tramosSinPasada = new Set(gasPorPasada(pasadasCache, lecturasGas, facturasGas).sinPasada.map(x => x.hastaID));
   $('gasLecturas').innerHTML = `<div class="tabla-scroll"><table>
     <thead><tr><th>Fecha y hora</th><th>Momento</th><th>Tubo 1</th><th>Tubo 2</th><th>Tubo 3</th><th>Propano en tubos (kg)</th><th>Consumo desde la anterior (kg)</th><th>Control</th><th>Notas</th><th></th></tr></thead>
     <tbody>${[...lecturasGas].reverse().map(l => {
@@ -2752,6 +2758,7 @@ function pintarLecturas() {
           } else if (it.kg) cons = num(it.kg);
         } else cons = num(it.kg);
         if (it.avisos.length) ctrl += (ctrl ? '<br>' : '') + `<span class="alerta">${it.avisos.join(' ')}</span>`;
+        if (tramosSinPasada.has(l.ID)) ctrl += (ctrl ? '<br>' : '') + '<span class="alerta">Sin pasada registrada en este tramo</span>';
       }
       return `<tr>
         <td>${fechaLegible(l.fh)}${l.local ? '<br><span class="alerta">solo en este equipo</span>' : ''}</td>
@@ -2777,6 +2784,39 @@ function refrescarGas() {
   pintarLecturas();
   pintarFacturas();
   pintarGasTabla(pasadasCache);
+  pintarGasPorCereal(pasadasCache);
+}
+
+function pintarGasPorCereal(pasadas) {
+  const { porPasada, sinPasada } = gasPorPasada(pasadas, lecturasGas, facturasGas);
+  const grupos = {};
+  porPasada.forEach((g, p) => {
+    const mes = String(p.Fecha || '').slice(0, 7), cer = String(p.Cereal || '—');
+    const k = mes + '|' + cer;
+    const r = grupos[k] || (grupos[k] = { mes, cer, kg: 0, costo: 0, tn: 0, tnListas: 0, tnPts: 0, pasadas: 0, sinPrecio: false, provisorio: false });
+    const tn = Number(p.Toneladas) || 0, pts = Number(p.HumedadEntrada) - Number(p.HumedadSalida);
+    r.kg += g.kg; r.costo += g.costo; r.tn += tn; r.tnPts += pts > 0 ? tn * pts : 0; r.pasadas++;
+    if (listaParaPuerto(p)) r.tnListas += tn;
+    if (g.sinPrecio) r.sinPrecio = true; if (g.provisorio) r.provisorio = true;
+  });
+  const sin = {};
+  sinPasada.forEach(x => { const r = sin[x.mes] || (sin[x.mes] = { kg: 0, costo: 0, sinPrecio: false }); r.kg += x.kg; if (x.costo === null) r.sinPrecio = true; else r.costo += x.costo; });
+  const filas = Object.values(grupos).sort((a, b) => b.mes.localeCompare(a.mes) || a.cer.localeCompare(b.cer));
+  if (!filas.length && !Object.keys(sin).length) {
+    $('gasPorCereal').innerHTML = '<p class="vacio">Todavía no hay pasadas con lecturas de gas antes y después.</p>';
+    return;
+  }
+  const meses = [...new Set([...filas.map(f => f.mes), ...Object.keys(sin)])].sort().reverse();
+  $('gasPorCereal').innerHTML = `<div class="tabla-scroll"><table>
+    <thead><tr><th>Mes</th><th>Cereal</th><th>Pasadas</th><th>Gas (kg)</th><th>Tn por secadora</th><th>Tn listas para puerto</th><th>Kg gas / tn lista</th><th>Kg gas / tn·punto</th><th>Costo (US$)</th><th>Costo / tn lista (US$)</th><th>Costo / tn·punto (US$)</th></tr></thead>
+    <tbody>${meses.map(mes => filas.filter(f => f.mes === mes).map(f => {
+      const marca = f.provisorio ? ' *' : '';
+      return `<tr><td>${mes}</td><td>${f.cer}</td><td>${f.pasadas}</td><td><b>${num(f.kg)}</b></td><td>${num(f.tn, 1)}</td><td>${num(f.tnListas, 1)}</td>
+        <td><b>${f.tnListas ? num(f.kg / f.tnListas, 2) : '—'}</b></td><td>${f.tnPts ? num(f.kg / f.tnPts, 2) : '—'}</td>
+        <td>${f.sinPrecio ? '—' : usd(f.costo, 2) + marca}</td><td><b>${!f.sinPrecio && f.tnListas ? usd(f.costo / f.tnListas, 2) + marca : '—'}</b></td>
+        <td><b>${!f.sinPrecio && f.tnPts ? usd(f.costo / f.tnPts, 3) + marca : '—'}</b></td></tr>`;
+    }).join('') + (sin[mes] ? `<tr><td>${mes}</td><td class="izq" colspan="2"><span class="alerta">Gas sin pasada registrada</span></td><td><b>${num(sin[mes].kg)}</b></td><td>—</td><td>—</td><td>—</td><td>—</td><td>${sin[mes].sinPrecio ? '—' : usd(sin[mes].costo, 2)}</td><td>—</td><td>—</td></tr>` : '')).join('')}</tbody></table></div>
+    <p class="nota">Cada pasada se lleva el gas que bajó entre la lectura anterior y la siguiente, repartido según toneladas × puntos de humedad cuando hay más de una pasada en ese tramo. Por eso una tanda chica, con su encendido, sale más cara por tonelada que secar un silo entero de una vez. Cuando un grano pasa dos veces, las dos pasadas suman gas y puntos, pero el grano se cuenta una sola vez en "Tn listas" (la pasada que lo deja dentro de la tolerancia). "Costo / tn·punto" no depende de cuántas pasadas haga falta: costo de un lote = toneladas × puntos totales quitados × ese valor. "Gas sin pasada registrada" es gas que bajó entre dos lecturas sin ninguna pasada en el medio.</p>`;
 }
 
 async function subirPendientes() {
@@ -2882,11 +2922,14 @@ function costeoGas(lects, facts, precioDe = precioFactura) {
   if (precio === null) return null;                      // sin ninguna factura no hay costo
   const precioInicial = precio;
   let provisorio = false;
-  const meses = {};
+  const meses = {}, tramos = [];
   intervalosGas(lects).forEach(it => {
     const mes = it.hasta.fh.slice(0, 7);
     const m = meses[mes] || (meses[mes] = { costo: 0, kg: 0, provisorio: false });
-    if (it.kg > 0) { m.costo += it.kg * precio; m.kg += it.kg; if (provisorio) m.provisorio = true; }
+    if (it.kg > 0) {
+      m.costo += it.kg * precio; m.kg += it.kg; if (provisorio) m.provisorio = true;
+      tramos.push({ it, costo: it.kg * precio, provisorio });
+    }
     if (it.carga && it.cargaRemitoKg > 0) {
       const f = porCarga.get(it.hasta.ID);
       const precioCarga = f ? precioDe(f) : precio;   // sin factura: provisorio al último precio
@@ -2896,7 +2939,39 @@ function costeoGas(lects, facts, precioDe = precioFactura) {
       precio = (antes * precio + R * precioCarga) / (antes + R);
     }
   });
-  return { meses, precioActual: precio, precioInicial, provisorio };
+  return { meses, tramos, precioActual: precio, precioInicial, provisorio };
+}
+
+/* ---- gas de cada pasada ----
+   El gas que bajó entre dos lecturas se reparte entre las pasadas de ese tramo, en proporción a
+   toneladas × puntos de humedad quitados. Las pasadas guardan solo la fecha: se ubican al mediodía.
+   Si en un tramo no hay pasadas, ese gas queda aparte ("sin pasada": arranques, pruebas, olvidos). */
+const fhPasada = p => String(p.Fecha || '').slice(0, 10) + ' 12:00';
+function pesoPasada(p) {
+  const tn = Number(p.Toneladas) || 0, pts = Number(p.HumedadEntrada) - Number(p.HumedadSalida);
+  return pts > 0 ? tn * pts : tn;
+}
+function gasPorPasada(pasadas, lects, facts) {
+  const cu = costeoGas(lects, facts, precioFacturaUSD);
+  const tramos = cu ? cu.tramos : intervalosGas(lects).filter(it => it.kg > 0).map(it => ({ it, costo: null, provisorio: false }));
+  const porPasada = new Map(), sinPasada = [];
+  tramos.forEach(t => {
+    const dentro = (pasadas || []).filter(p => { const f = fhPasada(p); return f > t.it.desde.fh && f <= t.it.hasta.fh; });
+    const total = dentro.reduce((a, p) => a + pesoPasada(p), 0);
+    if (!dentro.length || !(total > 0)) {
+      sinPasada.push({ mes: t.it.hasta.fh.slice(0, 7), kg: t.it.kg, costo: t.costo, hastaID: t.it.hasta.ID });
+      return;
+    }
+    dentro.forEach(p => {
+      const parte = pesoPasada(p) / total;
+      const r = porPasada.get(p) || { kg: 0, costo: 0, provisorio: false, sinPrecio: false };
+      r.kg += t.it.kg * parte;
+      if (t.costo === null) r.sinPrecio = true; else r.costo += t.costo * parte;
+      if (t.provisorio) r.provisorio = true;
+      porPasada.set(p, r);
+    });
+  });
+  return { porPasada, sinPasada };
 }
 
 /* ---- pantalla ---- */
