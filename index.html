@@ -690,7 +690,7 @@ function cargarEnSilo(it, tn, cereal) {
   const ch = (V - f.conoInf - f.m3Copete) / f.m3PorChapa;
   if (ch >= 0) { d.chapas = Math.min(f.chapas, ch); d.copete = 1; }
   else { d.chapas = Math.max(0.01, (V - f.conoInf) / f.m3PorChapa); d.copete = 0; }
-  d.chapas = Math.round(d.chapas * 100) / 100;
+  d.chapas = Math.round(d.chapas * 1000) / 1000;
   d.cereal = cereal;
   if (d.mezcla) { d.mezcla.repaso = 0; d.mezcla.nuevo = d.chapas; }
   return entra;
@@ -3330,7 +3330,7 @@ function sacarDeSilo(it, tn, cereal) {
     const ch = (V - f.conoInf + f.m3Pozo) / f.m3PorChapa;
     if (ch <= f.chapas) { d.chapas = Math.max(0.01, ch); d.copete = -1; }
     else { d.chapas = f.chapas; d.copete = 0; }
-    d.chapas = Math.round(d.chapas * 100) / 100;
+    d.chapas = Math.round(d.chapas * 1000) / 1000;
   }
   if (d.mezcla) { d.mezcla.repaso = 0; d.mezcla.nuevo = d.chapas; }
   return sale;
@@ -3357,7 +3357,7 @@ function pintarSelectSiloSalida() {
     const txt = `Silo ${d.id} · ${vacio ? 'vacío' : otro ? 'tiene ' + nombreCereal(d.cereal).toLowerCase() : '≈ ' + num(tnDeSilo(it)) + ' tn'}`;
     return `<option value="${d.id}"${otro || vacio ? ' disabled' : ''}>${txt}</option>`;
   }).join('');
-  sel.innerHTML = '<option value="">No sé de qué silo salió</option>' + opciones;
+  sel.innerHTML = '<option value="">Elegí de qué silo salió</option><option value="?">No sé de qué silo salió</option>' + opciones;
   if (previo && sel.querySelector(`option[value="${previo}"]:not([disabled])`)) sel.value = previo;
   pintarPreviewSalida();
 }
@@ -3365,7 +3365,9 @@ function pintarSelectSiloSalida() {
 function pintarPreviewSalida() {
   const kg = Number($('salKg').value) || 0, cereal = $('salCereal').value, silo = $('salSilo').value;
   let t = '';
-  if (kg > 0 && silo) {
+  if (kg > 0 && silo === '') {
+    t = 'Elegí de qué silo salió, o marcá "No sé de qué silo salió".';
+  } else if (kg > 0 && silo !== '?') {
     const it = porId(silo), hay = it ? tnDeSilo(it) * 1000 : 0;
     t = kg > hay + 1 ? `El silo ${silo} tiene ≈ ${tnTxt(hay)} según el cubicaje: se va a vaciar y faltan ≈ ${tnTxt(kg - hay)}. Revisalo en la próxima recorrida.`
       : `Al silo ${silo} le quedan ≈ ${tnTxt(hay - kg)} después de esta salida.`;
@@ -3379,8 +3381,10 @@ function pintarPreviewSalida() {
 
 async function guardarSalida() {
   const kg = Number($('salKg').value) || 0, cereal = $('salCereal').value;
-  let silo = $('salSilo').value;
+  const elegido = $('salSilo').value;
   if (!$('salFecha').value || !(kg > 0)) { estadoSal('Faltan la fecha o los kg de balanza.', true); return; }
+  if (elegido === '') { estadoSal('Elegí de qué silo salió, o marcá "No sé de qué silo salió".', true); return; }
+  let silo = elegido === '?' ? '' : elegido;
   if (!silo) { const secos = silosSecosCon(cereal); if (secos.length === 1) silo = String(secos[0].dato.id); }
   const s = { ID: 'S' + Date.now(), fecha: $('salFecha').value, cereal, kg, silo, carta: $('salCarta').value.trim(), notas: $('salNotas').value.trim(), asignado: {} };
   $('salGuardar').disabled = true;
@@ -3394,7 +3398,34 @@ async function guardarSalida() {
   }
   anotar(`Salida de ${tnTxt(kg)} de ${nombreCereal(cereal).toLowerCase()}${silo ? ' del silo ' + silo : ' (silo sin confirmar)'}`);
   estadoSal(silo ? `Guardada y descontada del silo ${silo}.` : 'Guardada como sin confirmar.');
-  $('salKg').value = ''; $('salCarta').value = ''; $('salNotas').value = '';
+  $('salKg').value = ''; $('salCarta').value = ''; $('salNotas').value = ''; $('salSilo').value = '';
+  pintarTodo();
+  pintarSalidas();
+}
+
+/* una salida que quedó "sin confirmar": cuando se sabe el silo, se le descuenta */
+function elegirSiloSalida(boton) {
+  const s = salidasSilos.find(x => x.ID === boton.dataset.confirmarSal);
+  if (!s) return;
+  const opciones = silosConCubicaje().filter(it => it.dato.chapas > 0.01 && it.dato.cereal === s.cereal)
+    .map(it => `<option value="${it.dato.id}">Silo ${it.dato.id} · ≈ ${num(tnDeSilo(it))} tn</option>`).join('');
+  if (!opciones) { estadoSal(`No hay ningún silo con ${nombreCereal(s.cereal).toLowerCase()} para asignarle esta salida.`, true); return; }
+  const span = document.createElement('span');
+  span.innerHTML = ` <select style="padding:2px 4px;border:1px solid var(--linea);font:inherit;">${opciones}</select> <button class="mini">Descontar</button>`;
+  boton.replaceWith(span);
+  span.querySelector('button').onclick = () => confirmarSiloSalida(s, span.querySelector('select').value);
+}
+async function confirmarSiloSalida(s, silo) {
+  const it = porId(silo);
+  if (!it) return;
+  const previo = s.silo;
+  s.silo = String(silo);
+  const res = await postSheet('SalidasSilos', 'upsert', filaSalida(s), 'ID');
+  if (!subidaOk(res)) { s.silo = previo; estadoSal('No se pudo guardar en la Sheet. Probá de nuevo.', true); return; }
+  sacarDeSilo(it, s.kg / 1000, s.cereal);
+  sincronizarCubicaje([it.dato.id]);
+  anotar(`Salida de ${tnTxt(s.kg)} confirmada en el silo ${silo}`);
+  estadoSal(`Confirmada: se descontaron ${tnTxt(s.kg)} del silo ${silo}.`);
   pintarTodo();
   pintarSalidas();
 }
@@ -3506,11 +3537,13 @@ function pintarSalidas() {
       const asig = Object.keys(s.asignado).map(id => `${id}: ${tnTxt(s.asignado[id])}`).join(' · ');
       const pk = kgPendientes(s);
       const silo = s.silo ? s.silo : (asig ? asig : '') + (pk > 0.5 ? `${asig ? ' · ' : ''}<span class="alerta">sin confirmar ${tnTxt(pk)}</span>` : '');
+      const confirmar = !s.silo && !kgAsignados(s) ? ` <button class="mini solo-pantalla" data-confirmar-sal="${s.ID}">Confirmar silo</button>` : '';
       return `<tr><td>${s.fecha.split('-').reverse().join('/')}</td><td>${nombreCereal(s.cereal)}</td><td>${num(s.kg / 1000, 2)}</td>
-        <td class="izq">${silo}</td><td>${s.carta.replace(/</g, '&lt;') || '—'}</td><td class="izq">${s.notas.replace(/</g, '&lt;')}</td>
+        <td class="izq">${silo}${confirmar}</td><td>${s.carta.replace(/</g, '&lt;') || '—'}</td><td class="izq">${s.notas.replace(/</g, '&lt;')}</td>
         <td class="solo-pantalla"><button class="mini" data-borrar-sal="${s.ID}">Borrar</button></td></tr>`;
     }).join('')}</tbody></table></div>` : '<p class="vacio">Todavía no hay salidas registradas.</p>';
   $('salTabla').querySelectorAll('[data-borrar-sal]').forEach(b => b.onclick = () => borrarSalida(b.dataset.borrarSal));
+  $('salTabla').querySelectorAll('[data-confirmar-sal]').forEach(b => b.onclick = () => elegirSiloSalida(b));
 
   pintarFormRecorrida();
   const ultR = recorridas.slice(0, 60);
