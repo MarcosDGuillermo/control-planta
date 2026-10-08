@@ -817,10 +817,10 @@ async function postSheet(sheet, action, row, key, intento = 0) {
 }
 
 /* aplica el estado guardado en la pestaña Cubicaje a los silos del circuito de secado */
-function aplicarCubicajeRemoto(datosPlanta) {
+function aplicarCubicajeRemoto(datosPlanta, clave = 'monaco') {
   if (!cubicajeRemoto || !cubicajeRemoto.Cubicaje) return;
   cubicajeRemoto.Cubicaje.forEach(fila => {
-    const s = datosPlanta.silos.find(x => String(x.id) === String(fila.SiloID));
+    const s = datosPlanta.silos.find(x => claveSilo(clave, x.id) === String(fila.SiloID));
     if (!s) return;
     if (fila.Cereal) s.cereal = String(fila.Cereal).toLowerCase();
     if (s.semilla) s.variedad = fila.Notas ? String(fila.Notas) : '';
@@ -873,21 +873,93 @@ function rearmarEscena() {
 }
 
 /* sube a la Sheet el estado actual de los silos indicados */
+/* La Virgen guarda sus silos con prefijo V (V1…V7, VA1) para no pisar la numeración de Mónaco */
+const claveSilo = (clave, id) => clave === 'virgen' ? 'V' + id : String(id);
+/* las escrituras van de a una: el script agrega filas al final y dos a la vez podrían pisarse */
+let colaSheet = Promise.resolve();
+function enCola(hoja, accion, fila, clave) {
+  const p = colaSheet.then(() => postSheet(hoja, accion, fila, clave));
+  colaSheet = p.catch(() => {});
+  return p;
+}
+/* copia en memoria de lo leído de la Sheet: se mantiene al día para que cambiar de planta no pierda lo editado */
+function recordarFila(hoja, fila, clave) {
+  if (!cubicajeRemoto) cubicajeRemoto = {};
+  const t = cubicajeRemoto[hoja] || (cubicajeRemoto[hoja] = []);
+  const i = t.findIndex(r => String(r[clave]) === String(fila[clave]));
+  if (i >= 0) t[i] = fila; else t.push(fila);
+}
+function olvidarFila(hoja, valor, clave) {
+  if (cubicajeRemoto && cubicajeRemoto[hoja]) cubicajeRemoto[hoja] = cubicajeRemoto[hoja].filter(r => String(r[clave]) !== String(valor));
+}
 function sincronizarCubicaje(ids) {
-  if (planta !== 'monaco' || !datos || !ids || !ids.length) return;
-  ids.forEach(id => {
+  if (!datos || !ids || !ids.length) return;
+  [...new Set(ids.map(String))].forEach(id => {
     const it = porId(id);
-    if (!it) return;
+    if (!it || it.tipo !== 'silo') return;
     const d = it.dato, f = it.fam;
-    const vol = volumenSilo(f, d);
-    const tn = vol * (DENSIDAD[d.cereal] || 0.7);
-    postSheet('Cubicaje', 'upsert', {
-      SiloID: id, Cereal: d.cereal.charAt(0).toUpperCase() + d.cereal.slice(1),
+    const tn = f.aOjo ? d.chapas / f.chapas * f.tn : volumenSilo(f, d) * (DENSIDAD[d.cereal] || 0.7);
+    const fila = {
+      SiloID: claveSilo(planta, id), Cereal: d.cereal.charAt(0).toUpperCase() + d.cereal.slice(1),
       Sentido: d.copete === 1 ? 'copete arriba' : d.copete === -1 ? 'copete abajo' : 'enrasado',
       Chapas: d.chapas, Toneladas: +tn.toFixed(2),
       UltimaActualizacion: new Date().toISOString(), Notas: d.semilla ? (d.variedad || '') : ''
-    }, 'SiloID');
+    };
+    recordarFila('Cubicaje', fila, 'SiloID');
+    enCola('Cubicaje', 'upsert', fila, 'SiloID');
   });
+}
+
+/* ---- bolsones (La Virgen) ---- */
+const NOMBRE_PLANTA = { monaco: 'Mónaco', virgen: 'La Virgen' };
+function filaBolsa(clave, b) {
+  return { ID: b.id, Planta: NOMBRE_PLANTA[clave], Bateria: b.playon, Largo: b.largo, Cereal: b.cereal,
+           Metros: b.metros, UltimaActualizacion: new Date().toISOString() };
+}
+const claveBolsa = (clave, id) => NOMBRE_PLANTA[clave] + '|' + id;
+function guardarBolsa(b) {
+  const fila = filaBolsa(planta, b);
+  fila.Clave = claveBolsa(planta, b.id);
+  recordarFila('Bolsones', fila, 'Clave');
+  enCola('Bolsones', 'upsert', fila, 'Clave');
+}
+function borrarBolsaSheet(id) {
+  olvidarFila('Bolsones', claveBolsa(planta, id), 'Clave');
+  enCola('Bolsones', 'delete', { Clave: claveBolsa(planta, id) }, 'Clave');
+}
+/* si la Sheet ya tiene bolsones de esta planta, mandan ellos; si no, se suben los de partida */
+function aplicarBolsonesRemoto(d, clave) {
+  if (!d.playones || !d.playones.length) return;
+  const filas = ((cubicajeRemoto && cubicajeRemoto.Bolsones) || []).filter(r => String(r.Planta) === NOMBRE_PLANTA[clave]);
+  if (filas.length) {
+    d.bolsas = filas.map(r => ({
+      id: String(r.ID), playon: d.playones.some(p => p.id === r.Bateria) ? r.Bateria : d.playones[0].id,
+      largo: Number(r.Largo) || 60, cereal: String(r.Cereal || 'vacio').toLowerCase(), metros: Number(r.Metros) || 0
+    })).sort((a, b) => (+a.id.slice(1) || 0) - (+b.id.slice(1) || 0));
+  } else if (cubicajeRemoto && !bolsonesSembrados[clave]) {
+    bolsonesSembrados[clave] = true;
+    d.bolsas.forEach(b => { const f = filaBolsa(clave, b); f.Clave = claveBolsa(clave, b.id); recordarFila('Bolsones', f, 'Clave'); enCola('Bolsones', 'upsert', f, 'Clave'); });
+  }
+}
+const bolsonesSembrados = {};
+
+/* datos de una planta con lo guardado en la Sheet, sin dibujarla (para el total de las dos plantas) */
+function datosDePlanta(clave) {
+  if (clave === planta) return datos;
+  const d = JSON.parse(JSON.stringify(PLANTAS[clave]));
+  aplicarCubicajeRemoto(d, clave);
+  aplicarBolsonesRemoto(d, clave);
+  return d;
+}
+function tnCerealPlanta(d) {
+  let t = 0;
+  d.silos.forEach(s => {
+    const f = FAMILIAS[s.fam];
+    if (INSUMOS.includes(s.cereal) || (s.semilla && s.cereal !== 'vacio')) return;
+    t += f.aOjo ? s.chapas / f.chapas * f.tn : volumenSilo(f, s) * (DENSIDAD[s.cereal] || 0.7);
+  });
+  (d.bolsas || []).forEach(b => { t += b.metros * (BOLSA.tnPorMetro[b.cereal] || 0); });
+  return t;
 }
 
 
@@ -968,20 +1040,25 @@ const PLANTAS = {
       { id: 'fondo',  nombre: 'Batería norte', x:  20, z: -55, rot: -0.75, paso:  5.2 },
       { id: 'playon', nombre: 'Batería sur',    x: -15, z:  32, rot:  0.25, paso: -5.2 }
     ],
+    /* estado real informado en octubre 2026: 14 bolsones de 75 m y 2 de 66 m, todos de maíz.
+       El reparto entre baterías es provisorio: se corrige desde el panel de cada bolsón. */
     bolsas: [
-      { id: 'S1',  playon: 'fondo',  largo: 60, cereal: 'soja',   metros: 60 },
-      { id: 'S2',  playon: 'fondo',  largo: 60, cereal: 'soja',   metros: 47 },
-      { id: 'S3',  playon: 'fondo',  largo: 60, cereal: 'maiz',   metros: 60 },
-      { id: 'S4',  playon: 'fondo',  largo: 66, cereal: 'maiz',   metros: 22 },
-      { id: 'S5',  playon: 'fondo',  largo: 66, cereal: 'vacio',  metros:  0 },
-      { id: 'S6',  playon: 'playon', largo: 75, cereal: 'maiz',   metros: 75 },
-      { id: 'S7',  playon: 'playon', largo: 75, cereal: 'maiz',   metros: 75 },
-      { id: 'S8',  playon: 'playon', largo: 75, cereal: 'soja',   metros: 55 },
-      { id: 'S9',  playon: 'playon', largo: 75, cereal: 'soja',   metros: 75 },
-      { id: 'S10', playon: 'playon', largo: 66, cereal: 'trigo',  metros: 31 },
-      { id: 'S11', playon: 'playon', largo: 66, cereal: 'girasol',metros: 66 },
-      { id: 'S12', playon: 'playon', largo: 60, cereal: 'vacio',  metros:  0 },
-      { id: 'S13', playon: 'playon', largo: 60, cereal: 'vacio',  metros:  0 }
+      { id: 'S1', playon: 'fondo', largo: 75, cereal: 'maiz', metros: 75 },
+      { id: 'S2', playon: 'fondo', largo: 75, cereal: 'maiz', metros: 75 },
+      { id: 'S3', playon: 'fondo', largo: 75, cereal: 'maiz', metros: 75 },
+      { id: 'S4', playon: 'fondo', largo: 75, cereal: 'maiz', metros: 75 },
+      { id: 'S5', playon: 'fondo', largo: 75, cereal: 'maiz', metros: 75 },
+      { id: 'S6', playon: 'fondo', largo: 75, cereal: 'maiz', metros: 75 },
+      { id: 'S7', playon: 'fondo', largo: 75, cereal: 'maiz', metros: 75 },
+      { id: 'S8', playon: 'fondo', largo: 75, cereal: 'maiz', metros: 75 },
+      { id: 'S9', playon: 'playon', largo: 75, cereal: 'maiz', metros: 75 },
+      { id: 'S10', playon: 'playon', largo: 75, cereal: 'maiz', metros: 75 },
+      { id: 'S11', playon: 'playon', largo: 75, cereal: 'maiz', metros: 75 },
+      { id: 'S12', playon: 'playon', largo: 75, cereal: 'maiz', metros: 75 },
+      { id: 'S13', playon: 'playon', largo: 75, cereal: 'maiz', metros: 75 },
+      { id: 'S14', playon: 'playon', largo: 75, cereal: 'maiz', metros: 75 },
+      { id: 'S15', playon: 'playon', largo: 66, cereal: 'maiz', metros: 66 },
+      { id: 'S16', playon: 'playon', largo: 66, cereal: 'maiz', metros: 66 }
     ],
     obras: [
       { tipo: 'galpon',  x:  -1, z:  29, ancho: 16, largo: 8, alto: 6.0, rotulo: 'Galpón' },
@@ -1391,6 +1468,7 @@ function nuevaBolsa(playon) {
   ubicarBolsa(b, usados);
   datos.bolsas.push(b);
   armarBolsa(b);
+  guardarBolsa(b);
   const pl = datos.playones.find(p => p.id === playon);
   anotar(`Se hace un bolsón de ${largoNuevo} m en ${pl ? pl.nombre.toLowerCase() : playon}`);
   seleccionar(b.id);
@@ -1410,7 +1488,7 @@ function quitarBolsa(id, callado) {
   datos.bolsas = datos.bolsas.filter(b => b.id !== id);
   ordenarPlayones();
   items.forEach(i => { if (i.tipo === 'bolsa') { i.grupo.position.set(i.dato.x, 0, i.dato.z); i.grupo.rotation.y = i.dato.rot; } });
-  if (!callado) { anotar(`Se saca el bolsón ${String(id).slice(1)}`); seleccion = null; pintarTodo(); }
+  if (!callado) { borrarBolsaSheet(id); anotar(`Se saca el bolsón ${String(id).slice(1)}`); seleccion = null; pintarTodo(); }
 }
 
 /* cada bolsón se apoya al lado del anterior, corrido en perpendicular al playón */
@@ -1442,7 +1520,9 @@ function aplicarVisibilidadModulo() {
 function cargarPlanta(clave) {
   planta = clave;
   datos = JSON.parse(JSON.stringify(PLANTAS[clave]));
-  if (clave === 'monaco') { aplicarCubicajeRemoto(datos); aplicarLecturasATubos(datos); }
+  aplicarCubicajeRemoto(datos, clave);
+  aplicarBolsonesRemoto(datos, clave);
+  if (clave === 'monaco') aplicarLecturasATubos(datos);
   ordenarPlayones();
   limpiar();
   datos.silos.forEach(armarSilo);
@@ -1718,7 +1798,7 @@ function pintarPanel() {
       pintarPanel();
       sincronizarCubicaje([d.id]);
     });
-    if ($('selCopete')) $('selCopete').onchange = e => { d.copete = +e.target.value; pintarPanel(); };
+    if ($('selCopete')) $('selCopete').onchange = e => { d.copete = +e.target.value; pintarPanel(); sincronizarCubicaje([d.id]); };
     if ($('inpVariedad')) $('inpVariedad').onchange = e => {
       d.variedad = e.target.value.trim();
       pintarPanel();
@@ -1772,21 +1852,34 @@ function pintarPanel() {
     <select id="selLargo" aria-label="Largo del bolsón">
       ${LARGOS.map(l => `<option value="${l}"${l === d.largo ? ' selected' : ''}>Bolsón de ${l} m</option>`).join('')}
     </select>
+    <select id="selBateria" aria-label="Batería">
+      ${(datos.playones || []).map(p => `<option value="${p.id}"${p.id === d.playon ? ' selected' : ''}>${p.nombre}</option>`).join('')}
+    </select>
     <div class="mando"><button class="quitar" id="opQuitarBolsa">Sacar el bolsón</button></div>`;
   panel.querySelectorAll('[data-m]').forEach(b => b.onclick = () => {
     d.metros = Math.max(0, Math.min(d.largo, d.metros + +b.dataset.m));
     if (d.metros > 0 && d.cereal === 'vacio') d.cereal = 'maiz';
     pintarPanel();
+    guardarBolsa(d);
   });
   $('selCereal').onchange = e => {
     d.cereal = e.target.value;
     if (d.cereal === 'vacio') d.metros = 0;
     pintarPanel();
+    guardarBolsa(d);
   };
   $('selLargo').onchange = e => {
     d.largo = +e.target.value;
     d.metros = Math.min(d.metros, d.largo);
     rehacerBolsa(it);
+    guardarBolsa(d);
+  };
+  $('selBateria').onchange = e => {
+    d.playon = e.target.value;
+    rehacerBolsa(it);
+    ordenarPlayones();
+    items.forEach(i => { if (i.tipo === 'bolsa') { i.grupo.position.set(i.dato.x, 0, i.dato.z); i.grupo.rotation.y = i.dato.rot; } });
+    guardarBolsa(d);
   };
   $('opQuitarBolsa').onclick = () => quitarBolsa(d.id);
 }
@@ -1868,6 +1961,9 @@ function abrirCubicaje() {
       <tfoot><tr>
         <td colspan="5">Total de cereal en planta</td>
         <td>${num(totalTn, 2)} tn</td>
+      </tr><tr>
+        <td colspan="5">Total de cereal en las dos plantas (${planta === 'monaco' ? 'con La Virgen' : 'con Mónaco'}: ${num(tnCerealPlanta(datosDePlanta(planta === 'monaco' ? 'virgen' : 'monaco')), 2)} tn)</td>
+        <td>${num(totalTn + tnCerealPlanta(datosDePlanta(planta === 'monaco' ? 'virgen' : 'monaco')), 2)} tn</td>
       </tr>${totalSemilla ? `<tr>
         <td colspan="5">Semillas en aéreos, aparte</td>
         <td>${num(totalSemilla, 2)} tn</td>
