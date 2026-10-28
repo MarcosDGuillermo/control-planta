@@ -429,15 +429,15 @@
 <div class="cubicaje" id="modalSalidas">
   <div class="hoja">
     <img data-logo alt="Cereales Lobería" style="width:60px;height:60px;display:block;margin-bottom:8px;">
-    <h2>Salidas y recorridas</h2>
-    <p class="sub">Registrá cada salida con los kg de balanza. Si no sabés de qué silo salió, queda sin confirmar y se reparte en la próxima recorrida, cuando anotes las chapas reales.</p>
+    <h2>Salidas y recorridas · <span id="salTituloPlanta">Mónaco</span></h2>
+    <p class="sub">Registrá cada salida con los kg de balanza. Se lleva por planta: lo que ves es de la planta abierta. Si no sabés de qué silo o bolsón salió, queda sin confirmar y se reparte en la próxima recorrida, cuando anotes las chapas reales.</p>
 
     <h3 class="gas-h solo-pantalla" style="margin-top:6px;">Nueva salida</h3>
     <div class="gas-form solo-pantalla">
       <label>Fecha <input type="date" id="salFecha"></label>
       <label>Cereal <select id="salCereal"><option value="soja">Soja</option><option value="maiz">Maíz</option><option value="trigo">Trigo</option><option value="cebada">Cebada forrajera</option><option value="cervecera">Cebada cervecera</option><option value="girasol">Girasol</option></select></label>
       <label>Kg de balanza <input type="number" id="salKg" min="0" step="1" inputmode="decimal" style="width:110px;"></label>
-      <label>Salió del silo <select id="salSilo" style="min-width:190px;"></select></label>
+      <label>Salió de <select id="salSilo" style="min-width:190px;"></select></label>
       <label>N° carta de porte <input type="text" id="salCarta" style="width:150px;"></label>
       <label>Notas <input type="text" id="salNotas" style="width:140px;"></label>
       <button class="fuerte" id="salGuardar">Guardar salida</button>
@@ -448,7 +448,7 @@
     <div id="salTabla"></div>
 
     <h3 class="gas-h">Recorrida de control</h3>
-    <p class="sub solo-pantalla" style="margin:0 0 4px;">Anotá las chapas reales y la forma de arriba de los silos que mediste; dejá vacíos los demás. Conviene medir juntos todos los silos de un mismo cereal.</p>
+    <p class="sub solo-pantalla" style="margin:0 0 4px;">Anotá las chapas reales y la forma de arriba de los silos que mediste (en los bolsones, los metros con grano); dejá vacíos los demás. Conviene medir juntos todos los de un mismo cereal.</p>
     <div class="gas-form solo-pantalla">
       <label>Fecha <input type="date" id="recFecha"></label>
       <label>Notas <input type="text" id="recNotas" style="width:200px;"></label>
@@ -3376,13 +3376,42 @@ $('facCarga').addEventListener('change', completarDesdeCarga);
 $('facGuardar').onclick = guardarFactura;
 
 /* ============================================================
-   SALIDAS DE SILOS Y RECORRIDAS DE CONTROL
+   SALIDAS Y RECORRIDAS DE CONTROL (Mónaco y La Virgen, silos y bolsones)
    - Cada salida se registra con los kg de balanza. Si se sabe el silo, se le descuenta por cubicaje.
    - Si no se sabe, queda "sin confirmar" (por cereal) y no se le resta a ningún silo.
    - En la recorrida se anotan las chapas reales: lo que un silo bajó de más se explica primero con
      las salidas sin confirmar de ese cereal; lo que sobra queda como diferencia.
    ============================================================ */
 let salidasSilos = [], recorridas = [];
+
+/* ---- unidades de almacenaje: silos con cubicaje y, en La Virgen, también bolsones ----
+   En la Sheet cada unidad se guarda con una clave que no se repite entre plantas:
+   Mónaco "6"; La Virgen silo "V2", aéreo "VA1", bolsón "VS3". */
+const PREFIJO = { monaco: '', virgen: 'V' };
+const plantaDeClave = k => /^V/.test(String(k)) ? 'virgen' : 'monaco';
+const claveUnidad = it => PREFIJO[planta] + it.dato.id;
+const itDeClave = k => plantaDeClave(k) === planta ? porId(String(k).slice(PREFIJO[planta].length)) : null;
+const nombreDeClave = k => {
+  const id = String(k).replace(/^V/, '');
+  return /^S\d/.test(id) ? `Bolsón ${id.slice(1)}` : `Silo ${id}`;
+};
+const esBolsa = it => it && it.tipo === 'bolsa';
+const tnPorMetroDe = c => BOLSA.tnPorMetro[c] || 0;
+const tnDeSilo = it => esBolsa(it) ? it.dato.metros * tnPorMetroDe(it.dato.cereal)
+  : volumenSilo(it.fam, it.dato) * (DENSIDAD[it.dato.cereal] || 0.7);
+const conGrano = it => esBolsa(it) ? it.dato.metros > 0.01 : it.dato.chapas > 0.01;
+/* silos con cubicaje (sin aéreos ni semilla) y bolsones de la planta abierta */
+const silosConCubicaje = () => [
+  ...items.filter(it => it.tipo === 'silo' && !it.fam.aOjo && !it.fam.aereo && !it.dato.semilla)
+    .sort((a, b) => Number(a.dato.id) - Number(b.dato.id)),
+  ...items.filter(it => it.tipo === 'bolsa').sort((a, b) => (+String(a.dato.id).slice(1) || 0) - (+String(b.dato.id).slice(1) || 0))
+];
+/* de dónde puede salir ese cereal ya seco: tienen ese cereal y no son previos de la secadora */
+function silosSecosCon(cereal) {
+  const previos = ((datos.circuito && datos.circuito.previos) || []).map(String);
+  return silosConCubicaje().filter(it => conGrano(it) && it.dato.cereal === cereal && (esBolsa(it) || !previos.includes(String(it.dato.id))));
+}
+function guardarUnidad(it) { if (esBolsa(it)) guardarBolsa(it.dato); else sincronizarCubicaje([it.dato.id]); }
 
 /* "6=50000|4=10000" ↔ { '6': 50000, '4': 10000 } */
 const leerAsignado = t => {
@@ -3391,32 +3420,44 @@ const leerAsignado = t => {
   return out;
 };
 const escribirAsignado = o => Object.keys(o).filter(k => o[k] > 0.5).map(k => `${k}=${Math.round(o[k])}`).join('|');
+const NOMBRE_A_PLANTA = { 'Mónaco': 'monaco', 'La Virgen': 'virgen' };
 
 function normSalida(r) {
+  const silo = r.SiloID !== undefined && r.SiloID !== '' ? String(r.SiloID) : '';
   return {
     ID: String(r.ID || ''), fecha: String(r.Fecha || '').slice(0, 10), cereal: String(r.Cereal || '').toLowerCase(),
-    kg: Number(r.Kg) || 0, silo: r.SiloID !== undefined && r.SiloID !== '' ? String(r.SiloID) : '',
-    carta: r.CartaPorte ? String(r.CartaPorte) : '', notas: r.Notas ? String(r.Notas) : '',
-    asignado: leerAsignado(r.Asignado)
+    kg: Number(r.Kg) || 0, silo, carta: r.CartaPorte ? String(r.CartaPorte) : '', notas: r.Notas ? String(r.Notas) : '',
+    asignado: leerAsignado(r.Asignado),
+    planta: NOMBRE_A_PLANTA[r.Planta] || (silo ? plantaDeClave(silo) : 'monaco')
   };
 }
-const filaSalida = s => ({ ID: s.ID, Fecha: s.fecha, Cereal: s.cereal, Kg: s.kg, SiloID: s.silo, CartaPorte: s.carta, Notas: s.notas, Asignado: escribirAsignado(s.asignado) });
+const filaSalida = s => ({ ID: s.ID, Fecha: s.fecha, Planta: NOMBRE_PLANTA[s.planta], Cereal: s.cereal, Kg: s.kg, SiloID: s.silo,
+  CartaPorte: s.carta, Notas: s.notas, Asignado: escribirAsignado(s.asignado) });
 const kgAsignados = s => Object.values(s.asignado).reduce((a, b) => a + b, 0);
 const kgPendientes = s => s.silo ? 0 : Math.max(0, s.kg - kgAsignados(s));
+const salidasDePlanta = () => salidasSilos.filter(s => s.planta === planta);
 function pendientePorCereal() {
   const p = {};
-  salidasSilos.forEach(s => { const k = kgPendientes(s); if (k > 0.5) p[s.cereal] = (p[s.cereal] || 0) + k; });
+  salidasDePlanta().forEach(s => { const k = kgPendientes(s); if (k > 0.5) p[s.cereal] = (p[s.cereal] || 0) + k; });
   return p;
 }
 function cargarSalidasRecorridas(remoto) {
   salidasSilos = ((remoto && remoto.SalidasSilos) || []).map(normSalida).filter(s => s.ID && s.kg > 0)
     .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.ID.localeCompare(b.ID));
   recorridas = ((remoto && remoto.Recorridas) || []).filter(r => r.ID)
+    .map(r => ({ ...r, _planta: NOMBRE_A_PLANTA[r.Planta] || plantaDeClave(r.SiloID) }))
     .sort((a, b) => String(b.Fecha).localeCompare(String(a.Fecha)) || String(b.ID).localeCompare(String(a.ID)));
 }
 
-/* saca tn de un silo por cubicaje: se vacía desde abajo, así que arriba queda pozo */
+/* saca tn de un silo por cubicaje (se vacía desde abajo: arriba queda pozo) o de un bolsón por metros */
 function sacarDeSilo(it, tn, cereal) {
+  if (esBolsa(it)) {
+    const d = it.dato, porM = tnPorMetroDe(cereal) || 3.3;
+    const sale = Math.min(tn, d.metros * porM);
+    d.metros = Math.max(0, Math.round((d.metros - sale / porM) * 10) / 10);
+    if (d.metros <= 0.01) { d.metros = 0; d.cereal = 'vacio'; }
+    return sale;
+  }
   const f = it.fam, d = it.dato, dens = DENSIDAD[cereal] || 0.7;
   const hay = volumenSilo(f, d) * dens;
   const sale = Math.min(tn, hay);
@@ -3432,44 +3473,35 @@ function sacarDeSilo(it, tn, cereal) {
   return sale;
 }
 
-/* silos con cubicaje (sin aéreos ni semilla) */
-const silosConCubicaje = () => items.filter(it => it.tipo === 'silo' && !it.fam.aOjo && !it.fam.aereo && !it.dato.semilla)
-  .sort((a, b) => Number(a.dato.id) - Number(b.dato.id));
-const tnDeSilo = it => volumenSilo(it.fam, it.dato) * (DENSIDAD[it.dato.cereal] || 0.7);
-/* silos de donde puede salir ese cereal ya seco: tienen ese cereal y no son previos de la secadora */
-function silosSecosCon(cereal) {
-  const previos = (datos.circuito && datos.circuito.previos) || [];
-  return silosConCubicaje().filter(it => it.dato.chapas > 0.01 && it.dato.cereal === cereal && !previos.map(String).includes(String(it.dato.id)));
-}
-
 function estadoSal(msg, mal) { $('salEstado').textContent = msg; $('salEstado').classList.toggle('mal', !!mal); }
 function estadoRec(msg, mal) { $('recEstado').textContent = msg; $('recEstado').classList.toggle('mal', !!mal); }
 const tnTxt = kg => num(kg / 1000, 1) + ' tn';
+const nombreIt = it => nombreDeClave(claveUnidad(it));
 
 function pintarSelectSiloSalida() {
   const cereal = $('salCereal').value, sel = $('salSilo'), previo = sel.value;
   const opciones = silosConCubicaje().map(it => {
-    const d = it.dato, otro = d.chapas > 0.01 && d.cereal !== cereal, vacio = d.chapas <= 0.01;
-    const txt = `Silo ${d.id} · ${vacio ? 'vacío' : otro ? 'tiene ' + nombreCereal(d.cereal).toLowerCase() : '≈ ' + num(tnDeSilo(it)) + ' tn'}`;
-    return `<option value="${d.id}"${otro || vacio ? ' disabled' : ''}>${txt}</option>`;
+    const d = it.dato, vacio = !conGrano(it), otro = !vacio && d.cereal !== cereal;
+    const txt = `${nombreIt(it)} · ${vacio ? 'vacío' : otro ? 'tiene ' + nombreCereal(d.cereal).toLowerCase() : '≈ ' + num(tnDeSilo(it)) + ' tn'}`;
+    return `<option value="${claveUnidad(it)}"${otro || vacio ? ' disabled' : ''}>${txt}</option>`;
   }).join('');
-  sel.innerHTML = '<option value="">Elegí de qué silo salió</option><option value="?">No sé de qué silo salió</option>' + opciones;
+  sel.innerHTML = '<option value="">Elegí de dónde salió</option><option value="?">No sé de dónde salió</option>' + opciones;
   if (previo && sel.querySelector(`option[value="${previo}"]:not([disabled])`)) sel.value = previo;
   pintarPreviewSalida();
 }
 
 function pintarPreviewSalida() {
-  const kg = Number($('salKg').value) || 0, cereal = $('salCereal').value, silo = $('salSilo').value;
+  const kg = Number($('salKg').value) || 0, cereal = $('salCereal').value, clave = $('salSilo').value;
   let t = '';
-  if (kg > 0 && silo === '') {
-    t = 'Elegí de qué silo salió, o marcá "No sé de qué silo salió".';
-  } else if (kg > 0 && silo !== '?') {
-    const it = porId(silo), hay = it ? tnDeSilo(it) * 1000 : 0;
-    t = kg > hay + 1 ? `El silo ${silo} tiene ≈ ${tnTxt(hay)} según el cubicaje: se va a vaciar y faltan ≈ ${tnTxt(kg - hay)}. Revisalo en la próxima recorrida.`
-      : `Al silo ${silo} le quedan ≈ ${tnTxt(hay - kg)} después de esta salida.`;
+  if (kg > 0 && clave === '') {
+    t = 'Elegí de dónde salió, o marcá "No sé de dónde salió".';
+  } else if (kg > 0 && clave !== '?') {
+    const it = itDeClave(clave), hay = it ? tnDeSilo(it) * 1000 : 0, n = nombreDeClave(clave);
+    t = kg > hay + 1 ? `${n} tiene ≈ ${tnTxt(hay)} según el cubicaje: se va a vaciar y faltan ≈ ${tnTxt(kg - hay)}. Revisalo en la próxima recorrida.`
+      : `A ${n.toLowerCase()} le quedan ≈ ${tnTxt(hay - kg)} después de esta salida.`;
   } else if (kg > 0) {
     const secos = silosSecosCon(cereal);
-    t = secos.length === 1 ? `Solo hay un silo con ${nombreCereal(cereal).toLowerCase()} seco (el ${secos[0].dato.id}): se le descuenta directo.`
+    t = secos.length === 1 ? `Solo hay un lugar con ${nombreCereal(cereal).toLowerCase()} (${nombreIt(secos[0]).toLowerCase()}): se le descuenta directo.`
       : `Queda sin confirmar. Se reparte en la próxima recorrida de ${nombreCereal(cereal).toLowerCase()}.`;
   }
   $('salPreview').textContent = t;
@@ -3479,56 +3511,69 @@ async function guardarSalida() {
   const kg = Number($('salKg').value) || 0, cereal = $('salCereal').value;
   const elegido = $('salSilo').value;
   if (!$('salFecha').value || !(kg > 0)) { estadoSal('Faltan la fecha o los kg de balanza.', true); return; }
-  if (elegido === '') { estadoSal('Elegí de qué silo salió, o marcá "No sé de qué silo salió".', true); return; }
-  let silo = elegido === '?' ? '' : elegido;
-  if (!silo) { const secos = silosSecosCon(cereal); if (secos.length === 1) silo = String(secos[0].dato.id); }
-  const s = { ID: 'S' + Date.now(), fecha: $('salFecha').value, cereal, kg, silo, carta: $('salCarta').value.trim(), notas: $('salNotas').value.trim(), asignado: {} };
+  if (elegido === '') { estadoSal('Elegí de dónde salió, o marcá "No sé de dónde salió".', true); return; }
+  let clave = elegido === '?' ? '' : elegido;
+  if (!clave) { const secos = silosSecosCon(cereal); if (secos.length === 1) clave = claveUnidad(secos[0]); }
+  const s = { ID: 'S' + Date.now(), fecha: $('salFecha').value, cereal, kg, silo: clave, planta,
+              carta: $('salCarta').value.trim(), notas: $('salNotas').value.trim(), asignado: {} };
   $('salGuardar').disabled = true;
   const res = await postSheet('SalidasSilos', 'upsert', filaSalida(s), 'ID');
+  if (subidaOk(res) && !clave && planta !== 'monaco') {
+    /* sin silo, la planta solo queda en la columna Planta: si falta esa columna, se confundiría con Mónaco */
+    const remoto = await fetchSheet();
+    const fila = remoto && (remoto.SalidasSilos || []).find(r => String(r.ID) === s.ID);
+    if (fila && !fila.Planta) {
+      await postSheet('SalidasSilos', 'delete', { ID: s.ID }, 'ID');
+      $('salGuardar').disabled = false;
+      estadoSal('No se guardó: agregá la columna "Planta" en la pestaña SalidasSilos (y en Recorridas) y volvé a intentar.', true);
+      return;
+    }
+  }
   $('salGuardar').disabled = false;
   if (!subidaOk(res)) { estadoSal('No se pudo guardar en la pestaña SalidasSilos' + (res && res.error ? ` (${res.error})` : '') + '. Revisá la conexión y que la pestaña exista.', true); return; }
   salidasSilos.push(s);
-  if (silo) {
-    const it = porId(silo);
-    if (it) { sacarDeSilo(it, kg / 1000, cereal); sincronizarCubicaje([it.dato.id]); }
+  if (clave) {
+    const it = itDeClave(clave);
+    if (it) { sacarDeSilo(it, kg / 1000, cereal); guardarUnidad(it); }
   }
-  anotar(`Salida de ${tnTxt(kg)} de ${nombreCereal(cereal).toLowerCase()}${silo ? ' del silo ' + silo : ' (silo sin confirmar)'}`);
-  estadoSal(silo ? `Guardada y descontada del silo ${silo}.` : 'Guardada como sin confirmar.');
+  const donde = clave ? ' de ' + nombreDeClave(clave).toLowerCase() : ' (sin confirmar)';
+  anotar(`Salida de ${tnTxt(kg)} de ${nombreCereal(cereal).toLowerCase()}${donde}`);
+  estadoSal(clave ? `Guardada y descontada de ${nombreDeClave(clave).toLowerCase()}.` : 'Guardada como sin confirmar.');
   $('salKg').value = ''; $('salCarta').value = ''; $('salNotas').value = ''; $('salSilo').value = '';
   pintarTodo();
   pintarSalidas();
 }
 
-/* una salida que quedó "sin confirmar": cuando se sabe el silo, se le descuenta */
+/* una salida que quedó "sin confirmar": cuando se sabe de dónde salió, se descuenta */
 function elegirSiloSalida(boton) {
   const s = salidasSilos.find(x => x.ID === boton.dataset.confirmarSal);
   if (!s) return;
-  const opciones = silosConCubicaje().filter(it => it.dato.chapas > 0.01 && it.dato.cereal === s.cereal)
-    .map(it => `<option value="${it.dato.id}">Silo ${it.dato.id} · ≈ ${num(tnDeSilo(it))} tn</option>`).join('');
-  if (!opciones) { estadoSal(`No hay ningún silo con ${nombreCereal(s.cereal).toLowerCase()} para asignarle esta salida.`, true); return; }
+  const opciones = silosConCubicaje().filter(it => conGrano(it) && it.dato.cereal === s.cereal)
+    .map(it => `<option value="${claveUnidad(it)}">${nombreIt(it)} · ≈ ${num(tnDeSilo(it))} tn</option>`).join('');
+  if (!opciones) { estadoSal(`No hay ningún silo ni bolsón con ${nombreCereal(s.cereal).toLowerCase()} para asignarle esta salida.`, true); return; }
   const span = document.createElement('span');
   span.innerHTML = ` <select style="padding:2px 4px;border:1px solid var(--linea);font:inherit;">${opciones}</select> <button class="mini">Descontar</button>`;
   boton.replaceWith(span);
   span.querySelector('button').onclick = () => confirmarSiloSalida(s, span.querySelector('select').value);
 }
-async function confirmarSiloSalida(s, silo) {
-  const it = porId(silo);
+async function confirmarSiloSalida(s, clave) {
+  const it = itDeClave(clave);
   if (!it) return;
   const previo = s.silo;
-  s.silo = String(silo);
+  s.silo = String(clave);
   const res = await postSheet('SalidasSilos', 'upsert', filaSalida(s), 'ID');
   if (!subidaOk(res)) { s.silo = previo; estadoSal('No se pudo guardar en la Sheet. Probá de nuevo.', true); return; }
   sacarDeSilo(it, s.kg / 1000, s.cereal);
-  sincronizarCubicaje([it.dato.id]);
-  anotar(`Salida de ${tnTxt(s.kg)} confirmada en el silo ${silo}`);
-  estadoSal(`Confirmada: se descontaron ${tnTxt(s.kg)} del silo ${silo}.`);
+  guardarUnidad(it);
+  anotar(`Salida de ${tnTxt(s.kg)} confirmada en ${nombreDeClave(clave).toLowerCase()}`);
+  estadoSal(`Confirmada: se descontaron ${tnTxt(s.kg)} de ${nombreDeClave(clave).toLowerCase()}.`);
   pintarTodo();
   pintarSalidas();
 }
 
 async function borrarSalida(id) {
   const s = salidasSilos.find(x => x.ID === id);
-  if (!s || !confirm(`¿Borrar la salida de ${tnTxt(s.kg)} del ${s.fecha.split('-').reverse().join('/')}? Si ya se descontó de un silo, no se vuelve a sumar: corregilo en la próxima recorrida.`)) return;
+  if (!s || !confirm(`¿Borrar la salida de ${tnTxt(s.kg)} del ${s.fecha.split('-').reverse().join('/')}? Si ya se descontó, no se vuelve a sumar: corregilo en la próxima recorrida.`)) return;
   const res = await postSheet('SalidasSilos', 'delete', { ID: id }, 'ID');
   if (!subidaOk(res)) { estadoSal('No se pudo borrar de la Sheet. Probá de nuevo.', true); return; }
   salidasSilos = salidasSilos.filter(x => x.ID !== id);
@@ -3537,17 +3582,23 @@ async function borrarSalida(id) {
 }
 
 /* ---- recorrida ---- */
+const estiloCampo = 'padding:3px 5px;border:1px solid var(--linea);font:inherit;';
 function pintarFormRecorrida() {
+  const unidades = silosConCubicaje();
+  const hayBolsas = unidades.some(esBolsa);
   $('recTabla').innerHTML = `<div class="tabla-scroll"><table>
-    <thead><tr><th>Silo</th><th>Según la app</th><th>Cereal</th><th>Chapas reales</th><th>Arriba</th></tr></thead>
-    <tbody>${silosConCubicaje().map(it => {
-      const d = it.dato, f = it.fam;
-      const esp = d.chapas > 0.01 ? `${num(d.chapas, d.chapas % 1 ? 1 : 0)} ch. ${d.copete === 1 ? '▲' : d.copete === -1 ? '▼' : ''} · ${nombreCereal(d.cereal).toLowerCase()} ≈ ${num(tnDeSilo(it))} tn` : 'vacío';
-      return `<tr data-silo="${d.id}">
-        <td>${d.id}</td><td class="izq">${esp}</td>
-        <td><select data-r="cereal" style="padding:3px 5px;border:1px solid var(--linea);font:inherit;">${Object.keys(DENSIDAD).map(c => `<option value="${c}"${c === d.cereal ? ' selected' : ''}>${nombreCereal(c)}</option>`).join('')}</select></td>
-        <td><input type="number" data-r="chapas" min="0" max="${f.chapas}" step="0.25" inputmode="decimal" placeholder="no medido" style="width:90px;padding:3px 5px;border:1px solid var(--linea);font:inherit;"></td>
-        <td><select data-r="forma" style="padding:3px 5px;border:1px solid var(--linea);font:inherit;"><option value="1"${d.copete === 1 ? ' selected' : ''}>Copete arriba</option><option value="0"${!d.copete ? ' selected' : ''}>Enrasado</option><option value="-1"${d.copete === -1 ? ' selected' : ''}>Copete abajo</option></select></td>
+    <thead><tr><th>Unidad</th><th>Según la app</th><th>Cereal</th><th>${hayBolsas ? 'Chapas / metros reales' : 'Chapas reales'}</th><th>Arriba</th></tr></thead>
+    <tbody>${unidades.map(it => {
+      const d = it.dato, bolsa = esBolsa(it);
+      const esp = !conGrano(it) ? 'vacío' : bolsa
+        ? `${num(d.metros, d.metros % 1 ? 1 : 0)} de ${d.largo} m · ${nombreCereal(d.cereal).toLowerCase()} ≈ ${num(tnDeSilo(it))} tn`
+        : `${num(d.chapas, d.chapas % 1 ? 1 : 0)} ch. ${d.copete === 1 ? '▲' : d.copete === -1 ? '▼' : ''} · ${nombreCereal(d.cereal).toLowerCase()} ≈ ${num(tnDeSilo(it))} tn`;
+      const cereales = (bolsa ? GRANOS.concat('vacio') : Object.keys(DENSIDAD));
+      return `<tr data-silo="${claveUnidad(it)}">
+        <td>${nombreIt(it)}</td><td class="izq">${esp}</td>
+        <td><select data-r="cereal" style="${estiloCampo}">${cereales.map(c => `<option value="${c}"${c === d.cereal ? ' selected' : ''}>${nombreCereal(c)}</option>`).join('')}</select></td>
+        <td><input type="number" data-r="chapas" min="0" max="${bolsa ? d.largo : it.fam.chapas}" step="${bolsa ? 1 : 0.25}" inputmode="decimal" placeholder="${bolsa ? 'metros' : 'no medido'}" style="width:90px;${estiloCampo}"></td>
+        <td>${bolsa ? '—' : `<select data-r="forma" style="${estiloCampo}"><option value="1"${d.copete === 1 ? ' selected' : ''}>Copete arriba</option><option value="0"${!d.copete ? ' selected' : ''}>Enrasado</option><option value="-1"${d.copete === -1 ? ' selected' : ''}>Copete abajo</option></select>`}</td>
       </tr>`;
     }).join('')}</tbody></table></div>`;
 }
@@ -3555,28 +3606,35 @@ function pintarFormRecorrida() {
 async function guardarRecorrida() {
   const filas = [...$('recTabla').querySelectorAll('tr[data-silo]')].map(tr => ({
     id: tr.dataset.silo, chapas: tr.querySelector('[data-r="chapas"]').value,
-    cereal: tr.querySelector('[data-r="cereal"]').value, forma: +tr.querySelector('[data-r="forma"]').value
+    cereal: tr.querySelector('[data-r="cereal"]').value, forma: tr.querySelector('[data-r="forma"]') ? +tr.querySelector('[data-r="forma"]').value : 0
   })).filter(r => r.chapas !== '');
-  if (!filas.length) { estadoRec('No anotaste ningún silo. Dejá vacíos solo los que no mediste.', true); return; }
+  if (!filas.length) { estadoRec('No anotaste ninguna unidad. Dejá vacías solo las que no mediste.', true); return; }
   const fecha = $('recFecha').value || hoyLocal(), recID = 'R' + Date.now();
   /* esperado vs real, en tn */
   const medidos = filas.map(r => {
-    const it = porId(r.id), f = it.fam;
-    const real = { chapas: Math.min(f.chapas, Math.max(0, Number(r.chapas))), copete: Number(r.chapas) > 0 ? r.forma : 0 };
-    const tnEsp = tnDeSilo(it), tnReal = volumenSilo(f, real) * (DENSIDAD[r.cereal] || 0.7);
-    return { it, r, real, tnEsp, tnReal, bajo: Math.max(0, tnEsp - tnReal), asignadoKg: 0 };
+    const it = itDeClave(r.id), bolsa = esBolsa(it);
+    let real, tnReal;
+    if (bolsa) {
+      real = { metros: Math.min(it.dato.largo, Math.max(0, Number(r.chapas))) };
+      tnReal = real.metros * tnPorMetroDe(r.cereal);
+    } else {
+      real = { chapas: Math.min(it.fam.chapas, Math.max(0, Number(r.chapas))), copete: Number(r.chapas) > 0 ? r.forma : 0 };
+      tnReal = volumenSilo(it.fam, real) * (DENSIDAD[r.cereal] || 0.7);
+    }
+    const tnEsp = tnDeSilo(it);
+    return { it, r, bolsa, real, tnEsp, tnReal, bajo: Math.max(0, tnEsp - tnReal), asignadoKg: 0 };
   });
-  /* las salidas sin confirmar de cada cereal se reparten entre los silos de ese cereal que bajaron de más */
+  /* las salidas sin confirmar de cada cereal se reparten entre las unidades de ese cereal que bajaron de más */
   const pend = pendientePorCereal();
   Object.keys(pend).forEach(cereal => {
     const candidatos = medidos.filter(m => m.r.cereal === cereal && m.bajo > 0.01);
     const totalBajo = candidatos.reduce((a, m) => a + m.bajo * 1000, 0);
     if (!totalBajo) return;
-    let aRepartir = Math.min(pend[cereal], totalBajo);
+    const aRepartir = Math.min(pend[cereal], totalBajo);
     candidatos.forEach(m => { m.asignadoKg = aRepartir * (m.bajo * 1000) / totalBajo; });
     /* se imputan a las salidas pendientes en orden de fecha */
     const cupo = {}; candidatos.forEach(m => { cupo[m.r.id] = m.asignadoKg; });
-    salidasSilos.filter(s => s.cereal === cereal && kgPendientes(s) > 0.5).forEach(s => {
+    salidasDePlanta().filter(s => s.cereal === cereal && kgPendientes(s) > 0.5).forEach(s => {
       let falta = kgPendientes(s);
       Object.keys(cupo).forEach(id => {
         if (falta <= 0.5 || cupo[id] <= 0.5) return;
@@ -3591,8 +3649,9 @@ async function guardarRecorrida() {
   for (const m of medidos) {
     const dif = m.tnEsp - m.tnReal - m.asignadoKg / 1000;   /* + = faltante sin explicar, − = sobrante */
     const res = await postSheet('Recorridas', 'append', {
-      ID: recID, Fecha: fecha, SiloID: m.r.id, Cereal: nombreCereal(m.r.cereal),
-      ChapasApp: +m.it.dato.chapas.toFixed(2), Chapas: m.real.chapas, Sentido: textoForma(m.real.copete),
+      ID: recID, Fecha: fecha, Planta: NOMBRE_PLANTA[planta], SiloID: m.r.id, Cereal: nombreCereal(m.r.cereal),
+      ChapasApp: m.bolsa ? +m.it.dato.metros.toFixed(1) : +m.it.dato.chapas.toFixed(2),
+      Chapas: m.bolsa ? m.real.metros : m.real.chapas, Sentido: m.bolsa ? 'metros de bolsón' : textoForma(m.real.copete),
       TnApp: +m.tnEsp.toFixed(2), TnReales: +m.tnReal.toFixed(2), TnSinConfirmar: +(m.asignadoKg / 1000).toFixed(2),
       Diferencia: +dif.toFixed(2), Notas: $('recNotas').value.trim()
     });
@@ -3604,61 +3663,63 @@ async function guardarRecorrida() {
   }
   $('recGuardar').disabled = false;
   if (errores) { estadoRec(`Hubo ${errores} escritura${errores > 1 ? 's' : ''} que no llegaron a la Sheet. Revisá que existan las pestañas Recorridas y SalidasSilos, y volvé a abrir esta pantalla antes de repetir.`, true); return; }
-  /* los silos medidos pasan a su valor real */
+  /* las unidades medidas pasan a su valor real */
   medidos.forEach(m => {
     const d = m.it.dato;
-    d.chapas = m.real.chapas; d.copete = m.real.copete; d.cereal = m.r.cereal;
-    if (d.mezcla) { d.mezcla.repaso = 0; d.mezcla.nuevo = d.chapas; }
+    d.cereal = m.r.cereal;
+    if (m.bolsa) { d.metros = m.real.metros; if (!d.metros) d.cereal = 'vacio'; }
+    else { d.chapas = m.real.chapas; d.copete = m.real.copete; if (d.mezcla) { d.mezcla.repaso = 0; d.mezcla.nuevo = d.chapas; } }
+    guardarUnidad(m.it);
   });
-  sincronizarCubicaje(medidos.map(m => m.r.id));
   const remoto = await fetchSheet();
   if (remoto) cargarSalidasRecorridas(remoto);
-  anotar(`Recorrida del ${fecha.split('-').reverse().join('/')}: ${medidos.length} silos controlados`);
-  estadoRec('Recorrida guardada. Los silos medidos quedaron con su valor real.');
+  anotar(`Recorrida del ${fecha.split('-').reverse().join('/')}: ${medidos.length} unidades controladas`);
+  estadoRec('Recorrida guardada. Lo medido quedó con su valor real.');
   $('recNotas').value = '';
   pintarTodo();
   pintarSalidas();
 }
 
 function pintarSalidas() {
+  $('salTituloPlanta').textContent = NOMBRE_PLANTA[planta];
   pintarSelectSiloSalida();
   const pend = pendientePorCereal();
   $('salPendiente').innerHTML = Object.keys(pend).length
     ? 'Sin confirmar: ' + Object.keys(pend).map(c => `<b>${tnTxt(pend[c])} de ${nombreCereal(c).toLowerCase()}</b>`).join(' · ') + '. Se reparten en la próxima recorrida.'
     : 'No hay salidas sin confirmar.';
-  const ult = salidasSilos.slice().reverse().slice(0, 40);
+  const ult = salidasDePlanta().slice().reverse().slice(0, 40);
   $('salTabla').innerHTML = ult.length ? `<div class="tabla-scroll"><table>
-    <thead><tr><th>Fecha</th><th>Cereal</th><th>Tn</th><th>Silo</th><th>Carta de porte</th><th>Notas</th><th class="solo-pantalla"></th></tr></thead>
+    <thead><tr><th>Fecha</th><th>Cereal</th><th>Tn</th><th>Salió de</th><th>Carta de porte</th><th>Notas</th><th class="solo-pantalla"></th></tr></thead>
     <tbody>${ult.map(s => {
-      const asig = Object.keys(s.asignado).map(id => `${id}: ${tnTxt(s.asignado[id])}`).join(' · ');
+      const asig = Object.keys(s.asignado).map(id => `${nombreDeClave(id)}: ${tnTxt(s.asignado[id])}`).join(' · ');
       const pk = kgPendientes(s);
-      const silo = s.silo ? s.silo : (asig ? asig : '') + (pk > 0.5 ? `${asig ? ' · ' : ''}<span class="alerta">sin confirmar ${tnTxt(pk)}</span>` : '');
-      const confirmar = !s.silo && !kgAsignados(s) ? ` <button class="mini solo-pantalla" data-confirmar-sal="${s.ID}">Confirmar silo</button>` : '';
+      const silo = s.silo ? nombreDeClave(s.silo) : (asig ? asig : '') + (pk > 0.5 ? `${asig ? ' · ' : ''}<span class="alerta">sin confirmar ${tnTxt(pk)}</span>` : '');
+      const confirmar = !s.silo && !kgAsignados(s) ? ` <button class="mini solo-pantalla" data-confirmar-sal="${s.ID}">Confirmar de dónde</button>` : '';
       return `<tr><td>${s.fecha.split('-').reverse().join('/')}</td><td>${nombreCereal(s.cereal)}</td><td>${num(s.kg / 1000, 2)}</td>
         <td class="izq">${silo}${confirmar}</td><td>${s.carta.replace(/</g, '&lt;') || '—'}</td><td class="izq">${s.notas.replace(/</g, '&lt;')}</td>
         <td class="solo-pantalla"><button class="mini" data-borrar-sal="${s.ID}">Borrar</button></td></tr>`;
-    }).join('')}</tbody></table></div>` : '<p class="vacio">Todavía no hay salidas registradas.</p>';
+    }).join('')}</tbody></table></div>` : '<p class="vacio">Todavía no hay salidas registradas en esta planta.</p>';
   $('salTabla').querySelectorAll('[data-borrar-sal]').forEach(b => b.onclick = () => borrarSalida(b.dataset.borrarSal));
   $('salTabla').querySelectorAll('[data-confirmar-sal]').forEach(b => b.onclick = () => elegirSiloSalida(b));
 
   pintarFormRecorrida();
-  const ultR = recorridas.slice(0, 60);
+  const ultR = recorridas.filter(r => r._planta === planta).slice(0, 60);
   $('recHistorial').innerHTML = ultR.length ? `<div class="tabla-scroll"><table>
-    <thead><tr><th>Fecha</th><th>Silo</th><th>Cereal</th><th>Según app (tn)</th><th>Real (tn)</th><th>Salidas sin confirmar asignadas (tn)</th><th>Diferencia (tn)</th><th>Notas</th></tr></thead>
+    <thead><tr><th>Fecha</th><th>Unidad</th><th>Cereal</th><th>Según app (tn)</th><th>Real (tn)</th><th>Salidas sin confirmar asignadas (tn)</th><th>Diferencia (tn)</th><th>Notas</th></tr></thead>
     <tbody>${ultR.map(r => {
       const dif = Number(r.Diferencia) || 0;
-      return `<tr><td>${String(r.Fecha).slice(0, 10).split('-').reverse().join('/')}</td><td>${r.SiloID}</td><td>${r.Cereal || ''}</td>
+      return `<tr><td>${String(r.Fecha).slice(0, 10).split('-').reverse().join('/')}</td><td>${nombreDeClave(r.SiloID)}</td><td>${r.Cereal || ''}</td>
         <td>${num(Number(r.TnApp) || 0, 1)}</td><td>${num(Number(r.TnReales) || 0, 1)}</td><td>${num(Number(r.TnSinConfirmar) || 0, 1)}</td>
         <td>${Math.abs(dif) < 0.05 ? '0' : `<span class="alerta">${dif > 0 ? 'faltan ' : 'sobran '}${num(Math.abs(dif), 1)}</span>`}</td>
         <td class="izq">${String(r.Notas || '').replace(/</g, '&lt;')}</td></tr>`;
-    }).join('')}</tbody></table></div>` : '<p class="vacio">Todavía no hay recorridas.</p>';
+    }).join('')}</tbody></table></div>` : '<p class="vacio">Todavía no hay recorridas en esta planta.</p>';
 }
 
 async function abrirSalidas() {
   document.getElementById('modalSalidas').classList.add('abierto');
   $('salFecha').value = hoyLocal(); $('recFecha').value = hoyLocal();
   estadoSal(''); estadoRec('');
-  if (planta !== 'monaco') { $('salTabla').innerHTML = '<p class="vacio">Las salidas y recorridas se llevan en la planta Mónaco.</p>'; return; }
+  $('salTituloPlanta').textContent = NOMBRE_PLANTA[planta];
   $('salTabla').innerHTML = '<p class="vacio">Cargando…</p>';
   const remoto = await fetchSheet();
   if (remoto) cargarSalidasRecorridas(remoto);
