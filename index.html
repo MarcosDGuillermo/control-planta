@@ -914,7 +914,7 @@ function sincronizarCubicaje(ids) {
 const NOMBRE_PLANTA = { monaco: 'Mónaco', virgen: 'La Virgen' };
 function filaBolsa(clave, b) {
   return { ID: b.id, Planta: NOMBRE_PLANTA[clave], Bateria: b.playon, Largo: b.largo, Cereal: b.cereal,
-           Metros: b.metros, UltimaActualizacion: new Date().toISOString() };
+           Metros: b.metros, TnPorMetro: b.tnPorMetro > 0 ? b.tnPorMetro : '', UltimaActualizacion: new Date().toISOString() };
 }
 const claveBolsa = (clave, id) => NOMBRE_PLANTA[clave] + '|' + id;
 function guardarBolsa(b) {
@@ -934,7 +934,8 @@ function aplicarBolsonesRemoto(d, clave) {
   if (filas.length) {
     d.bolsas = filas.map(r => ({
       id: String(r.ID), playon: d.playones.some(p => p.id === r.Bateria) ? r.Bateria : d.playones[0].id,
-      largo: Number(r.Largo) || 60, cereal: String(r.Cereal || 'vacio').toLowerCase(), metros: Number(r.Metros) || 0
+      largo: Number(r.Largo) || 60, cereal: String(r.Cereal || 'vacio').toLowerCase(), metros: Number(r.Metros) || 0,
+      tnPorMetro: Number(r.TnPorMetro) || 0
     })).sort((a, b) => (+a.id.slice(1) || 0) - (+b.id.slice(1) || 0));
   } else if (cubicajeRemoto && !bolsonesSembrados[clave]) {
     bolsonesSembrados[clave] = true;
@@ -958,7 +959,7 @@ function tnCerealPlanta(d) {
     if (INSUMOS.includes(s.cereal) || (s.semilla && s.cereal !== 'vacio')) return;
     t += f.aOjo ? s.chapas / f.chapas * f.tn : volumenSilo(f, s) * (DENSIDAD[s.cereal] || 0.7);
   });
-  (d.bolsas || []).forEach(b => { t += b.metros * (BOLSA.tnPorMetro[b.cereal] || 0); });
+  (d.bolsas || []).forEach(b => { t += b.metros * tnPmBolsa(b); });
   return t;
 }
 
@@ -1070,6 +1071,8 @@ const PLANTAS = {
 };
 
 const BOLSA = { diam: 2.74, tnPorMetro: { maiz: 3.4, soja: 3.3, trigo: 3.5, cebada: 2.9, cervecera: 2.9, girasol: 1.9, vacio: 0 } };
+/* toneladas por metro de un bolsón: la propia (si se cargó con poca presión o se sabe lo que entró) o la estimada del cereal */
+const tnPmBolsa = (b, cereal) => (b.tnPorMetro > 0 && (!cereal || cereal === b.cereal)) ? b.tnPorMetro : (BOLSA.tnPorMetro[cereal || b.cereal] || 0);
 const ROLES = {
   previo:   { texto: 'Paso previo a la secadora',  firme: true },
   enfriado: { texto: 'Enfriado después de secar',  firme: true }
@@ -1838,11 +1841,18 @@ function pintarPanel() {
   panel.innerHTML = `
     <h2>Bolsón ${String(d.id).slice(1)}</h2>
     <p class="rol">${pl ? pl.nombre : 'Playón'} · bolsón de ${d.largo} m</p>
-    <div class="dato principal"><span>Cargado</span><span>${num(d.metros * (BOLSA.tnPorMetro[d.cereal] || 0), 2)} tn</span></div>
+    <div class="dato principal"><span>Cargado</span><span>${num(d.metros * tnPmBolsa(d), 2)} tn</span></div>
     <div class="dato"><span>Cereal</span><span>${nombreCereal(d.cereal)}</span></div>
     <div class="dato"><span>Metros con grano</span><span>${d.metros} de ${d.largo}</span></div>
-    <div class="dato"><span>Por metro</span><span>${num(BOLSA.tnPorMetro[d.cereal] || 0, 2)} tn</span></div>
-    <p class="aviso">Diámetro y toneladas por metro estimados.</p>
+    <div class="dato"><span>Por metro</span><span>${num(tnPmBolsa(d), 2)} tn${d.tnPorMetro > 0 ? '' : ' (estimado)'}</span></div>
+    <p class="${d.tnPorMetro > 0 ? 'nota' : 'aviso'}">${d.tnPorMetro > 0 ? 'Toneladas por metro propias de este bolsón.' : 'Toneladas por metro estimadas para el cereal.'} Si se embolsó con menos presión o sabés lo que entró por balanza, cargalo acá.</p>
+    <label style="display:block;font-size:11.5px;color:var(--tenue);margin-top:8px;">Kg que entraron (balanza)
+      <input id="inpKgBolsa" type="number" min="0" step="100" inputmode="decimal" placeholder="ej.: 230000" style="width:100%;margin-top:3px;padding:6px 8px;border:1px solid var(--linea);font:inherit;box-sizing:border-box;">
+    </label>
+    <label style="display:block;font-size:11.5px;color:var(--tenue);margin-top:6px;">o toneladas por metro
+      <input id="inpTnPm" type="number" min="0" step="0.01" inputmode="decimal" value="${d.tnPorMetro > 0 ? d.tnPorMetro : ''}" placeholder="${num(BOLSA.tnPorMetro[d.cereal] || 0, 2)} (estimado)" style="width:100%;margin-top:3px;padding:6px 8px;border:1px solid var(--linea);font:inherit;box-sizing:border-box;">
+    </label>
+    <div class="mando"><button class="quitar" id="opTnPmGuardar" style="border-color:var(--steel);color:var(--ink);">Guardar toneladas</button></div>
     <div class="mando">
       <button data-m="-5" aria-label="Sacar metros">−</button>
       <span class="lectura">de a 5 m</span>
@@ -1882,6 +1892,16 @@ function pintarPanel() {
     guardarBolsa(d);
   };
   $('opQuitarBolsa').onclick = () => quitarBolsa(d.id);
+  $('opTnPmGuardar').onclick = () => {
+    const kg = Number($('inpKgBolsa').value) || 0, pm = Number($('inpTnPm').value) || 0;
+    if (kg > 0) {
+      if (!(d.metros > 0)) { alert('Primero cargá los metros con grano del bolsón.'); return; }
+      d.tnPorMetro = Math.round(kg / 1000 / d.metros * 1000) / 1000;
+    } else d.tnPorMetro = pm > 0 ? pm : 0;           /* vacío = vuelve al estimado del cereal */
+    anotar(`Bolsón ${String(d.id).slice(1)}: ${num(tnPmBolsa(d), 2)} tn por metro${d.tnPorMetro > 0 ? '' : ' (estimado)'}`);
+    pintarPanel();
+    guardarBolsa(d);
+  };
 }
 
 /* cambiar el largo obliga a rehacer la malla */
@@ -1929,13 +1949,13 @@ function abrirCubicaje() {
   });
 
   datos.bolsas.forEach(b => {
-    const tn = b.metros * (BOLSA.tnPorMetro[b.cereal] || 0);
+    const tn = b.metros * tnPmBolsa(b);
     totalTn += tn;
     if (b.metros > 0) porCereal[b.cereal] = (porCereal[b.cereal] || 0) + tn;
     filas.push({
       nombre: `Bolsa ${String(b.id).slice(1)}`, cereal: b.cereal,
       nivel: `${b.metros} / ${b.largo} m`,
-      cap: b.largo * (BOLSA.tnPorMetro[b.cereal] || 3.3), tn, alt: ''
+      cap: b.largo * (tnPmBolsa(b) || 3.3), tn, alt: ''
     });
   });
 
@@ -3393,12 +3413,22 @@ const claveUnidad = it => PREFIJO[planta] + it.dato.id;
 const itDeClave = k => plantaDeClave(k) === planta ? porId(String(k).slice(PREFIJO[planta].length)) : null;
 const nombreDeClave = k => {
   const id = String(k).replace(/^V/, '');
-  return /^S\d/.test(id) ? `Bolsón ${id.slice(1)}` : `Silo ${id}`;
+  if (/^S\d/.test(id)) return `Bolsón ${id.slice(1)}`;
+  const it = itDeClave(k);
+  if (it && it.dato.nombre) return it.dato.nombre;
+  return /^A/.test(id) ? `Aéreo ${id.slice(1) || id}` : `Silo ${id}`;
 };
 const esBolsa = it => it && it.tipo === 'bolsa';
 const tnPorMetroDe = c => BOLSA.tnPorMetro[c] || 0;
-const tnDeSilo = it => esBolsa(it) ? it.dato.metros * tnPorMetroDe(it.dato.cereal)
+const tnDeSilo = it => esBolsa(it) ? it.dato.metros * tnPmBolsa(it.dato)
+  : it.fam.aOjo ? it.dato.chapas / it.fam.chapas * it.fam.tn
   : volumenSilo(it.fam, it.dato) * (DENSIDAD[it.dato.cereal] || 0.7);
+/* aéreos: se llevan a ojo, en % de su capacidad (no tienen cubicaje) */
+const aereosDePlanta = () => items.filter(it => it.tipo === 'silo' && it.fam.aOjo)
+  .sort((a, b) => String(a.dato.id).localeCompare(String(b.dato.id), 'es', { numeric: true }));
+const esAereo = it => it && it.tipo === 'silo' && it.fam.aOjo;
+/* semilla e insumos no entran en el reparto de salidas de cereal */
+const fueraDeReparto = it => esAereo(it) && (it.dato.semilla || INSUMOS.includes(it.dato.cereal));
 const conGrano = it => esBolsa(it) ? it.dato.metros > 0.01 : it.dato.chapas > 0.01;
 /* silos con cubicaje (sin aéreos ni semilla) y bolsones de la planta abierta */
 const silosConCubicaje = () => [
@@ -3452,7 +3482,7 @@ function cargarSalidasRecorridas(remoto) {
 /* saca tn de un silo por cubicaje (se vacía desde abajo: arriba queda pozo) o de un bolsón por metros */
 function sacarDeSilo(it, tn, cereal) {
   if (esBolsa(it)) {
-    const d = it.dato, porM = tnPorMetroDe(cereal) || 3.3;
+    const d = it.dato, porM = tnPmBolsa(d, cereal) || 3.3;
     const sale = Math.min(tn, d.metros * porM);
     d.metros = Math.max(0, Math.round((d.metros - sale / porM) * 10) / 10);
     if (d.metros <= 0.01) { d.metros = 0; d.cereal = 'vacio'; }
@@ -3584,16 +3614,24 @@ async function borrarSalida(id) {
 /* ---- recorrida ---- */
 const estiloCampo = 'padding:3px 5px;border:1px solid var(--linea);font:inherit;';
 function pintarFormRecorrida() {
-  const unidades = silosConCubicaje();
+  const unidades = [...silosConCubicaje(), ...aereosDePlanta()];
   const hayBolsas = unidades.some(esBolsa);
   $('recTabla').innerHTML = `<div class="tabla-scroll"><table>
-    <thead><tr><th>Unidad</th><th>Según la app</th><th>Cereal</th><th>${hayBolsas ? 'Chapas / metros reales' : 'Chapas reales'}</th><th>Arriba</th></tr></thead>
+    <thead><tr><th>Unidad</th><th>Según la app</th><th>Cereal</th><th>Medida real<br><small>${hayBolsas ? 'chapas · metros (bolsón) · % (aéreo)' : 'chapas · % (aéreo)'}</small></th><th>Arriba</th></tr></thead>
     <tbody>${unidades.map(it => {
-      const d = it.dato, bolsa = esBolsa(it);
+      const d = it.dato, bolsa = esBolsa(it), aereo = esAereo(it);
+      const contenido = d.semilla && d.cereal !== 'vacio' ? 'semilla de ' + nombreCereal(d.cereal).toLowerCase() : nombreCereal(d.cereal).toLowerCase();
       const esp = !conGrano(it) ? 'vacío' : bolsa
-        ? `${num(d.metros, d.metros % 1 ? 1 : 0)} de ${d.largo} m · ${nombreCereal(d.cereal).toLowerCase()} ≈ ${num(tnDeSilo(it))} tn`
-        : `${num(d.chapas, d.chapas % 1 ? 1 : 0)} ch. ${d.copete === 1 ? '▲' : d.copete === -1 ? '▼' : ''} · ${nombreCereal(d.cereal).toLowerCase()} ≈ ${num(tnDeSilo(it))} tn`;
-      const cereales = (bolsa ? GRANOS.concat('vacio') : Object.keys(DENSIDAD));
+        ? `${num(d.metros, d.metros % 1 ? 1 : 0)} de ${d.largo} m · ${contenido} ≈ ${num(tnDeSilo(it))} tn`
+        : aereo ? `${num(d.chapas / it.fam.chapas * 100)} % · ${contenido} ≈ ${num(tnDeSilo(it))} tn`
+        : `${num(d.chapas, d.chapas % 1 ? 1 : 0)} ch. ${d.copete === 1 ? '▲' : d.copete === -1 ? '▼' : ''} · ${contenido} ≈ ${num(tnDeSilo(it))} tn`;
+      const cereales = bolsa ? GRANOS.concat('vacio') : aereo ? (d.semilla ? SEMILLAS.concat('vacio') : GRANOS.concat(INSUMOS, 'vacio')) : Object.keys(DENSIDAD);
+      if (aereo) return `<tr data-silo="${claveUnidad(it)}">
+        <td>${nombreIt(it)}</td><td class="izq">${esp}</td>
+        <td><select data-r="cereal" style="${estiloCampo}">${cereales.map(c => `<option value="${c}"${c === d.cereal ? ' selected' : ''}>${d.semilla && c !== 'vacio' ? 'Semilla de ' + nombreCereal(c).toLowerCase() : nombreCereal(c)}</option>`).join('')}</select></td>
+        <td><input type="number" data-r="chapas" min="0" max="100" step="10" inputmode="decimal" placeholder="% lleno" style="width:90px;${estiloCampo}"></td>
+        <td>—</td>
+      </tr>`;
       return `<tr data-silo="${claveUnidad(it)}">
         <td>${nombreIt(it)}</td><td class="izq">${esp}</td>
         <td><select data-r="cereal" style="${estiloCampo}">${cereales.map(c => `<option value="${c}"${c === d.cereal ? ' selected' : ''}>${nombreCereal(c)}</option>`).join('')}</select></td>
@@ -3612,22 +3650,25 @@ async function guardarRecorrida() {
   const fecha = $('recFecha').value || hoyLocal(), recID = 'R' + Date.now();
   /* esperado vs real, en tn */
   const medidos = filas.map(r => {
-    const it = itDeClave(r.id), bolsa = esBolsa(it);
+    const it = itDeClave(r.id), bolsa = esBolsa(it), aereo = esAereo(it);
     let real, tnReal;
     if (bolsa) {
       real = { metros: Math.min(it.dato.largo, Math.max(0, Number(r.chapas))) };
-      tnReal = real.metros * tnPorMetroDe(r.cereal);
+      tnReal = real.metros * tnPmBolsa(it.dato, r.cereal);
+    } else if (aereo) {
+      real = { chapas: Math.min(it.fam.chapas, Math.max(0, Number(r.chapas) / 100 * it.fam.chapas)), copete: 0 };
+      tnReal = real.chapas / it.fam.chapas * it.fam.tn;
     } else {
       real = { chapas: Math.min(it.fam.chapas, Math.max(0, Number(r.chapas))), copete: Number(r.chapas) > 0 ? r.forma : 0 };
       tnReal = volumenSilo(it.fam, real) * (DENSIDAD[r.cereal] || 0.7);
     }
     const tnEsp = tnDeSilo(it);
-    return { it, r, bolsa, real, tnEsp, tnReal, bajo: Math.max(0, tnEsp - tnReal), asignadoKg: 0 };
+    return { it, r, bolsa, aereo, real, tnEsp, tnReal, bajo: Math.max(0, tnEsp - tnReal), asignadoKg: 0 };
   });
   /* las salidas sin confirmar de cada cereal se reparten entre las unidades de ese cereal que bajaron de más */
   const pend = pendientePorCereal();
   Object.keys(pend).forEach(cereal => {
-    const candidatos = medidos.filter(m => m.r.cereal === cereal && m.bajo > 0.01);
+    const candidatos = medidos.filter(m => m.r.cereal === cereal && m.bajo > 0.01 && !fueraDeReparto(m.it));
     const totalBajo = candidatos.reduce((a, m) => a + m.bajo * 1000, 0);
     if (!totalBajo) return;
     const aRepartir = Math.min(pend[cereal], totalBajo);
@@ -3650,8 +3691,9 @@ async function guardarRecorrida() {
     const dif = m.tnEsp - m.tnReal - m.asignadoKg / 1000;   /* + = faltante sin explicar, − = sobrante */
     const res = await postSheet('Recorridas', 'append', {
       ID: recID, Fecha: fecha, Planta: NOMBRE_PLANTA[planta], SiloID: m.r.id, Cereal: nombreCereal(m.r.cereal),
-      ChapasApp: m.bolsa ? +m.it.dato.metros.toFixed(1) : +m.it.dato.chapas.toFixed(2),
-      Chapas: m.bolsa ? m.real.metros : m.real.chapas, Sentido: m.bolsa ? 'metros de bolsón' : textoForma(m.real.copete),
+      ChapasApp: m.bolsa ? +m.it.dato.metros.toFixed(1) : m.aereo ? Math.round(m.it.dato.chapas / m.it.fam.chapas * 100) : +m.it.dato.chapas.toFixed(2),
+      Chapas: m.bolsa ? m.real.metros : m.aereo ? Math.round(m.real.chapas / m.it.fam.chapas * 100) : m.real.chapas,
+      Sentido: m.bolsa ? 'metros de bolsón' : m.aereo ? '% de aéreo' : textoForma(m.real.copete),
       TnApp: +m.tnEsp.toFixed(2), TnReales: +m.tnReal.toFixed(2), TnSinConfirmar: +(m.asignadoKg / 1000).toFixed(2),
       Diferencia: +dif.toFixed(2), Notas: $('recNotas').value.trim()
     });
@@ -3668,6 +3710,7 @@ async function guardarRecorrida() {
     const d = m.it.dato;
     d.cereal = m.r.cereal;
     if (m.bolsa) { d.metros = m.real.metros; if (!d.metros) d.cereal = 'vacio'; }
+    else if (m.aereo) { d.chapas = m.real.chapas; if (!d.chapas) d.cereal = 'vacio'; if (d.semilla && d.cereal === 'vacio') d.variedad = ''; }
     else { d.chapas = m.real.chapas; d.copete = m.real.copete; if (d.mezcla) { d.mezcla.repaso = 0; d.mezcla.nuevo = d.chapas; } }
     guardarUnidad(m.it);
   });
