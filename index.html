@@ -2867,11 +2867,14 @@ function gasDelMes() {
 }
 
 /* toneladas × puntos de humedad quitados, por mes (todas las pasadas) */
+/* puntos de humedad que saca cada pasada: fijo, 2,5 por pasada (la humedad no se mide; las humedades
+   cargadas en pasadas viejas eran estimadas y no se usan) */
+function puntosPasada() { return PUNTOS_POR_PASADA; }
 function tnPuntosPorMes(pasadas) {
   const porMes = {};
   pasadas.forEach(p => {
     const mes = (p.Fecha || '').slice(0, 7);
-    const pts = Number(p.HumedadEntrada) - Number(p.HumedadSalida), tn = Number(p.Toneladas);
+    const pts = puntosPasada(p), tn = Number(p.Toneladas);
     if (!mes || !(pts > 0) || !(tn > 0)) return;
     porMes[mes] = (porMes[mes] || 0) + tn * pts;
   });
@@ -3046,13 +3049,14 @@ function refrescarGas() {
 
 function pintarGasPorCereal(pasadas) {
   const { porPasada, sinPasada } = gasPorPasada(pasadas, lecturasGas, facturasGas);
+  const lotes = costeoPorLote(pasadas, porPasada);
   const grupos = {};
   porPasada.forEach((g, p) => {
     const mes = String(p.Fecha || '').slice(0, 7), cer = String(p.Cereal || '—');
     const k = mes + '|' + cer;
-    const r = grupos[k] || (grupos[k] = { mes, cer, kg: 0, costo: 0, tn: 0, tnListas: 0, pasadas: 0, sinPrecio: false, provisorio: false });
+    const r = grupos[k] || (grupos[k] = { mes, cer, kg: 0, costo: 0, tn: 0, tnListas: 0, tnPts: 0, pasadas: 0, sinPrecio: false, provisorio: false });
     const tn = Number(p.Toneladas) || 0;
-    r.kg += g.kg; r.costo += g.costo; r.tn += tn; r.pasadas++;
+    r.kg += g.kg; r.costo += g.costo; r.tn += tn; r.tnPts += tn * puntosPasada(p); r.pasadas++;
     if (listaParaPuerto(p)) r.tnListas += tn;
     if (g.sinPrecio) r.sinPrecio = true; if (g.provisorio) r.provisorio = true;
   });
@@ -3066,17 +3070,18 @@ function pintarGasPorCereal(pasadas) {
   const meses = [...new Set([...filas.map(f => f.mes), ...Object.keys(sin)])].sort().reverse();
   const despC = tnDespachadas().cereal;
   const tnDe = f => despC[f.mes + '|' + cerealDeReporte(f.cer)] || 0;
+  const loteDe = f => lotes[f.mes + '|' + cerealDeReporte(f.cer)] || { kgListo: 0, costoListo: 0, kgProceso: 0, costoProceso: 0 };
   $('gasPorCereal').innerHTML = `<div class="tabla-scroll"><table>
-    <thead><tr><th>Mes</th><th>Cereal</th><th>Pasadas</th><th>Gas (kg)</th><th>Tn por secadora</th><th>Tn listas para puerto</th><th>Kg gas / tn lista</th><th>Costo (US$)</th><th>Costo / tn lista (US$)</th><th>Tn despachadas</th><th>Kg gas / tn desp.</th><th>Costo / tn desp. (US$)</th></tr></thead>
+    <thead><tr><th>Mes</th><th>Cereal</th><th>Pasadas</th><th>Gas (kg)</th><th>Tn pasadas por secadora</th><th>Kg gas / tn·punto</th><th>Costo (US$)</th><th>Costo / tn·punto (US$)</th><th>Tn despachadas (balanza)</th></tr></thead>
     <tbody>${meses.map(mes => filas.filter(f => f.mes === mes).map(f => {
       const marca = f.provisorio ? ' *' : '';
-      return `<tr><td>${mes}</td><td>${f.cer}</td><td>${f.pasadas}</td><td><b>${num(f.kg)}</b></td><td>${num(f.tn, 1)}</td><td>${num(f.tnListas, 1)}</td>
-        <td><b>${f.tnListas ? num(f.kg / f.tnListas, 2) : '—'}</b></td>
-        <td>${f.sinPrecio ? '—' : usd(f.costo, 2) + marca}</td><td><b>${!f.sinPrecio && f.tnListas ? usd(f.costo / f.tnListas, 2) + marca : '—'}</b></td>
-        <td>${tnDe(f) ? num(tnDe(f), 2) : '—'}</td><td><b>${tnDe(f) ? num(f.kg / tnDe(f), 2) : '—'}</b></td>
-        <td><b>${!f.sinPrecio && tnDe(f) ? usd(f.costo / tnDe(f), 2) + marca : '—'}</b></td></tr>`;
-    }).join('') + (sin[mes] ? `<tr><td>${mes}</td><td class="izq" colspan="2"><span class="alerta">Gas sin pasada registrada</span></td><td><b>${num(sin[mes].kg)}</b></td><td>—</td><td>—</td><td>—</td><td>${sin[mes].sinPrecio ? '—' : usd(sin[mes].costo, 2)}</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>` : '')).join('')}</tbody></table></div>
-    <p class="nota">Cada pasada se lleva el gas que bajó entre la lectura anterior y la siguiente, repartido según toneladas cuando hay más de una pasada en ese tramo (la humedad no se mide: se supone que cada pasada saca unos 2,5 puntos). Por eso una tanda chica, con su encendido, sale más cara por tonelada que secar un silo entero de una vez. Cuando un grano pasa dos veces, las dos pasadas suman gas, pero el grano se cuenta una sola vez en "Tn listas": en la pasada Única o en el Repaso, nunca en la Primera de dos. "Gas sin pasada registrada" es gas que bajó entre dos lecturas sin ninguna pasada en el medio. Las columnas "desp." dividen el gas de cada cereal por lo que salió pesado de ese cereal en el mes; el reparto del gas entre cereales sale de las pasadas.</p>`;
+      return `<tr><td>${mes}</td><td>${f.cer}</td><td>${f.pasadas}</td><td><b>${num(f.kg)}</b></td><td>${num(f.tn, 1)}</td>
+        <td>${f.tnPts ? num(f.kg / f.tnPts, 2) : '—'}</td>
+        <td>${f.sinPrecio ? '—' : usd(f.costo, 2) + marca}</td>
+        <td><b>${!f.sinPrecio && f.tnPts ? usd(f.costo / f.tnPts, 2) + marca : '—'}</b></td>
+        <td>${tnDe(f) ? num(tnDe(f), 2) : '—'}</td></tr>`;
+    }).join('') + (sin[mes] ? `<tr><td>${mes}</td><td class="izq" colspan="2"><span class="alerta">Gas sin pasada registrada</span></td><td><b>${num(sin[mes].kg)}</b></td><td>—</td><td>—</td><td>${sin[mes].sinPrecio ? '—' : usd(sin[mes].costo, 2)}</td><td>—</td><td>—</td></tr>` : '')).join('')}</tbody></table></div>
+    <p class="nota">Cada pasada se lleva el gas que bajó entre la lectura anterior y la siguiente, repartido según toneladas cuando hay más de una pasada en ese tramo. "Costo / tn·punto" es el costo del gas dividido por toneladas × 2,5 puntos por pasada: es el número que se compara con la tarifa de secada. "Gas sin pasada registrada" es gas que bajó entre dos lecturas sin ninguna pasada en el medio. "Tn despachadas" es lo que salió pesado por balanza de ese cereal en el mes, como referencia.</p>`;
 }
 
 async function subirPendientes() {
@@ -3240,6 +3245,50 @@ const fhPasada = p => String(p.Fecha || '').slice(0, 10) + ' 12:00';
 /* las pasadas no tienen ID: se identifican por sus datos */
 const clavePasada = p => [String(p.Fecha || '').slice(0, 10), p.Cereal, p.SiloOrigen, p.Chapas, p.Pasada, p.Toneladas].map(v => String(v ?? '').trim()).join('|');
 function pesoPasada(p) { return Number(p.Toneladas) || 0; }   /* cada pasada saca unos 2,5 puntos: se reparte por toneladas */
+/* ---- gas "en proceso": la Primera de dos gasta gas, pero el grano queda listo recién en el Repaso ----
+   Por cereal y en orden de fecha: el gas de cada Primera de dos queda guardado y se suma al Repaso que la
+   termina (proporcional a las toneladas repasadas). Así cada tonelada lista lleva el gas de sus dos pasadas,
+   aunque caigan en meses distintos. Lo que queda sin repasar al cierre del mes es gas en proceso. */
+const MERMA_REPASO = 0.97;   /* el Repaso pesa un poco menos que la Primera: el grano ya perdió agua */
+function costeoPorLote(pasadas, porPasada) {
+  const filas = (pasadas || []).map((p, i) => ({ p, i, f: String(p.Fecha || '').slice(0, 10), g: porPasada.get(p) }))
+    .filter(x => x.f).sort((a, b) => a.f.localeCompare(b.f) || a.i - b.i);
+  const pool = {}, porMes = {}, meses = [...new Set(filas.map(x => x.f.slice(0, 7)))].sort();
+  const celda = (mes, cer) => { const k = mes + '|' + cer; return porMes[k] || (porMes[k] = { mes, cer, kgListo: 0, costoListo: 0, kgProceso: 0, costoProceso: 0, sinPrecio: false }); };
+  const cerealDe = p => cerealDeReporte(p.Cereal);
+  const cerrarMes = mes => Object.keys(pool).forEach(cer => {
+    const r = celda(mes, cer);
+    r.kgProceso = pool[cer].reduce((a, l) => a + l.kg * l.resto, 0);
+    r.costoProceso = pool[cer].reduce((a, l) => a + l.costo * l.resto, 0);
+  });
+  let mesActual = null;
+  filas.forEach(({ p, f, g }) => {
+    const mes = f.slice(0, 7), cer = cerealDe(p), tipo = tipoDePasada(p);
+    if (mesActual && mes !== mesActual) meses.filter(m => m >= mesActual && m < mes).forEach(cerrarMes);
+    mesActual = mes;
+    const kg = g ? g.kg : 0, costo = g && !g.sinPrecio ? g.costo : 0, tn = Number(p.Toneladas) || 0;
+    const r = celda(mes, cer);
+    if (g && g.sinPrecio) r.sinPrecio = true;
+    if (tipo === 'primera') { (pool[cer] = pool[cer] || []).push({ tn: tn * MERMA_REPASO, kg, costo, resto: 1 }); return; }
+    let kgL = kg, costoL = costo;
+    if (tipo === 'repaso') {
+      let falta = tn;
+      (pool[cer] || []).forEach(l => {
+        if (falta <= 0 || l.resto <= 0) return;
+        const quedan = l.tn * l.resto, toma = Math.min(falta, quedan);
+        let parte = toma / l.tn;
+        if (l.resto - parte < 0.05) parte = l.resto;        /* el resto chico se cierra con este repaso */
+        kgL += l.kg * parte; costoL += l.costo * parte;
+        l.resto -= parte; falta -= toma;
+      });
+      if (pool[cer]) pool[cer] = pool[cer].filter(l => l.resto > 1e-6);
+    }
+    r.kgListo += kgL; r.costoListo += costoL;
+  });
+  if (mesActual) cerrarMes(mesActual);
+  return porMes;
+}
+
 function gasPorPasada(pasadas, lects, facts) {
   const cu = costeoGas(lects, facts, precioFacturaUSD);
   const tramos = cu ? cu.tramos : intervalosGas(lects).filter(it => it.kg > 0).map(it => ({ it, costo: null, provisorio: false }));
@@ -3400,6 +3449,9 @@ function pintarGasTabla(pasadas) {
   const enPesos = costeoGas(lecturasGas, facturasGas, precioFactura);
   const enDolares = costeoGas(lecturasGas, facturasGas, precioFacturaUSD);
   const desp = tnDespachadas().mes;
+  const puntosPorMes = tnPuntosPorMes(pasadas);
+  const tnPasadasMes = {};
+  (pasadas || []).forEach(p => { const m = String(p.Fecha || '').slice(0, 7); if (m) tnPasadasMes[m] = (tnPasadasMes[m] || 0) + (Number(p.Toneladas) || 0); });
   const meses = [...new Set([...Object.keys(listasPorMes), ...Object.keys(relojes)])].filter(Boolean).sort().reverse();
   if (!meses.length) {
     $('gasTabla').innerHTML = '<p class="vacio">Todavía no hay datos. Cargá una lectura de los relojes.</p>';
@@ -3408,7 +3460,7 @@ function pintarGasTabla(pasadas) {
   const faltaTC = facturasGas.some(f => !(f.tc > 0));
   const hayProvisorio = enDolares && Object.values(enDolares.meses).some(m => m.provisorio);
   $('gasTabla').innerHTML = `<div class="tabla-scroll"><table>
-    <thead><tr><th>Mes</th><th>Consumo relojes (kg)</th><th>Balance con remitos (kg)</th><th>Costo del gas (US$)</th><th>Costo del gas ($)</th><th>Tn listas para puerto</th><th>Kg gas / tn lista</th><th>Costo / tn lista (US$)</th><th>Tn despachadas (balanza)</th><th>Kg gas / tn despachada</th><th>Costo / tn despachada (US$)</th></tr></thead>
+    <thead><tr><th>Mes</th><th>Consumo relojes (kg)</th><th>Balance con remitos (kg)</th><th>Costo del gas (US$)</th><th>Costo del gas ($)</th><th>Tn pasadas por secadora</th><th>Kg gas / tn·punto</th><th>Costo / tn·punto (US$)</th><th>Tn despachadas (balanza)</th></tr></thead>
     <tbody>${meses.map(mes => {
       const r = relojes[mes];
       const kg = r && r.intervalos ? r.relojKg : null;
@@ -3423,18 +3475,17 @@ function pintarGasTabla(pasadas) {
         <td>${balance !== null ? num(balance) : '—'}</td>
         <td><b>${costoU !== null ? usd(costoU, 2) + marcaU : '—'}</b></td>
         <td>${costoP !== null ? plata(costoP) + marcaP : '—'}</td>
-        <td>${num(listo, 2)} tn</td>
-        <td><b>${kg && listo ? num(kg / listo, 2) : '—'}</b></td>
-        <td><b>${costoU !== null && listo ? usd(costoU / listo, 2) + marcaU : '—'}</b></td>
+        <td>${num(tnPasadasMes[mes] || 0, 2)} tn</td>
+        <td>${kg && puntosPorMes[mes] ? num(kg / puntosPorMes[mes], 2) : '—'}</td>
+        <td><b>${costoU !== null && puntosPorMes[mes] ? usd(costoU / puntosPorMes[mes], 2) + marcaU : '—'}</b></td>
         <td>${desp[mes] ? num(desp[mes], 2) : '—'}</td>
-        <td><b>${kg && desp[mes] ? num(kg / desp[mes], 2) : '—'}</b></td>
-        <td><b>${costoU !== null && desp[mes] ? usd(costoU / desp[mes], 2) + marcaU : '—'}</b></td>
       </tr>`;
     }).join('')}</tbody></table></div>
     <p class="nota">${enDolares
       ? `Precio promedio del gas que hay hoy en los tubos: <b>${usd(enDolares.precioActual, 3)} por kg</b>${enPesos ? ` (${plata(enPesos.precioActual, 2)} por kg)` : ''}.${hayProvisorio ? ' * Provisorio: falta la factura o el tipo de cambio de alguna carga.' : ''}`
       : (facturasGas.length ? 'Para ver costos en dólares, cargá el tipo de cambio en las facturas.' : 'Para ver costos, cargá la factura de al menos una carga del camión.')}${faltaTC && enDolares ? ' Hay facturas sin tipo de cambio: completalo para que el costo en dólares sea exacto.' : ''}
-    "Tn despachadas" son las salidas por venta y los retiros de productor de la planta de la secadora, pesados en balanza (pantalla "Despachos por balanza"). Es el dato objetivo: el gas del mes, medido con los relojes, dividido por lo que salió pesado. Incluye grano que entró seco y no pasó por la secadora.</p>`;
+    "Costo / tn·punto" es el costo del gas del mes dividido por el trabajo de la secadora: toneladas de cada pasada × 2,5 puntos (se supone que cada pasada baja 2,5 puntos, porque la humedad no se mide). Es el número que se compara con la tarifa de secada por tonelada y por punto.
+    "Tn despachadas" son las salidas por venta y los retiros de productor de la planta de la secadora, pesados en balanza: sirven para controlar las toneladas de las pasadas.</p>`;
 }
 
 /* eventos de la pantalla de gas (lecturas y parámetros de los tubos) */
