@@ -269,12 +269,6 @@
           <option value="girasol">Girasol</option>
         </select>
       </label>
-      <label style="font-size:11px;color:var(--tenue);display:flex;flex-direction:column;gap:2px;">Hum. entrada
-        <input id="humEntrada" type="number" step="0.1" value="18.2" style="width:64px;padding:4px 6px;border:1px solid var(--linea);font:inherit;">
-      </label>
-      <label style="font-size:11px;color:var(--tenue);display:flex;flex-direction:column;gap:2px;">Hum. salida
-        <input id="humSalida" type="number" step="0.1" value="15.6" style="width:64px;padding:4px 6px;border:1px solid var(--linea);font:inherit;">
-      </label>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:6px;">
       <label style="font-size:11px;color:var(--tenue);display:flex;flex-direction:column;gap:2px;">Va al silo
@@ -296,9 +290,11 @@
       <button id="finEnrasado" aria-pressed="false">Enrasado</button>
       <button id="finAbajo" aria-pressed="true">Copete abajo</button>
     </div>
-    <div class="plantas" style="margin-top:4px;">
-      <button id="pasada1" aria-pressed="true">1° pasada</button>
-      <button id="pasada2" aria-pressed="false">2° pasada</button>
+    <div class="rot" style="margin-top:4px;">Pasada</div>
+    <div class="plantas">
+      <button id="tipoUnica" aria-pressed="true" title="El cereal estaba para una sola pasada: queda listo">Única</button>
+      <button id="tipoPrimera" aria-pressed="false" title="Entró muy húmedo y va a volver a pasar">Primera de dos</button>
+      <button id="tipoRepaso" aria-pressed="false" title="Segunda vuelta de algo que ya pasó: queda listo">Repaso</button>
     </div>
   </div>
   <div class="grupo" id="grupoCircuito">
@@ -317,22 +313,27 @@
     <div class="botones" id="destinos"></div>
   </div>
   <div class="grupo" id="grupoInformeCubicaje">
-    <div class="rot">Cubicaje</div>
+    <div class="rot">Informes</div>
     <div class="botones">
-      <button id="opCubicaje">Ver informe</button>
+      <button id="opCubicaje">Cubicaje</button>
       <button id="opSalidas">Salidas y recorridas</button>
-      <button id="opDespachos2">Despachos por balanza</button>
     </div>
   </div>
   <div class="grupo" id="grupoInformeSecado">
-    <div class="rot">Secado</div>
+    <div class="rot">Informes</div>
     <div class="botones">
-      <button id="opPasadas">Ver pasadas</button>
-      <button id="opGas">Consumo de gas</button>
-      <button id="opDespachos">Despachos por balanza</button>
+      <button id="opPasadas">Pasadas</button>
+      <button id="opGas">Gas: lecturas y facturas</button>
     </div>
   </div>
-  <div class="grupo" id="grupoDemo">
+  <div class="grupo" id="grupoCierre">
+    <div class="rot">Cierre de mes</div>
+    <div class="botones">
+      <button id="opDespachos">Despachos por balanza</button>
+      <button id="opRecorridaCierre">Recorrida de silos</button>
+    </div>
+  </div>
+  <div class="grupo" id="grupoDemo" hidden>
     <div class="rot">Demostración</div>
     <div class="botones">
       <button id="opJornada" class="fuerte">Simular jornada</button>
@@ -387,7 +388,7 @@
       <button class="mini" id="pasDescargar">Descargar CSV</button>
     </div>
     <div id="pasTabla"></div>
-    <p class="pie" id="pasPie">Fecha, cereal, silo previo, sentido de conteo, chapas, humedad de entrada y salida, número de pasada, silo destino, toneladas y si quedó disponible para cargar a puerto (humedad de salida ≤ tolerancia del cereal: maíz 14,5, soja 13,5, trigo y cebada 14, girasol 11). "Gas" y "Costo pasada" salen de las lecturas de los relojes: el gas que bajó entre dos lecturas se reparte entre las pasadas de ese tramo según toneladas × puntos de humedad quitados, y se valoriza al precio en dólares de las facturas. Una pasada sin lecturas antes y después queda sin gas. Antes se repartía por mes entre todas las pasadas de ese mes, proporcional a cuántas toneladas pesó cada una.</p>
+    <p class="pie" id="pasPie">Fecha, cereal, silo previo, forma al empezar y al terminar, chapas, tipo de pasada, silo destino y toneladas. La humedad no se mide: se supone que cada pasada saca unos 2,5 puntos. "Queda lista" es Sí en la pasada Única y en el Repaso, y No en la Primera de dos. "Gas" y "Costo pasada" salen de las lecturas de los relojes: el gas que bajó entre dos lecturas se reparte entre las pasadas de ese tramo según sus toneladas, y se valoriza al precio en dólares de las facturas. Una pasada sin lecturas antes y después queda sin gas.</p>
     <div class="mandos">
       <button class="imprimir" id="pasImprimir">Imprimir</button>
       <button class="cerrar" id="pasCerrar">Cerrar</button>
@@ -495,6 +496,9 @@
     </div>
     <div class="nota" style="margin:2px 0 8px;"><b>Procedencias de la planta de la secadora</b> (las que cuentan para el gas):<br><span id="despProcedencias"></span></div>
     <div id="despResumen"></div>
+
+    <h3 class="gas-h">Cruce con las salidas cargadas en la app</h3>
+    <div id="despCruce"></div>
 
     <h3 class="gas-h">Viajes</h3>
     <div id="despTabla"></div>
@@ -773,7 +777,25 @@ function toleranciaPuerto(cereal) {
 }
 /* ¿quedó lista para puerto? Se recalcula con el cereal y la humedad de salida, así corrige también
    las pasadas viejas que se guardaron con la tolerancia única de 14,5. Si falta la humedad, vale lo guardado. */
-function listaParaPuerto(p) {
+/* tipo de pasada: Única (queda lista), Primera de dos (vuelve a pasar) o Repaso (segunda vuelta, queda lista).
+   Las pasadas viejas tienen número (1 o 2) y humedades: se traducen al tipo con esos datos. */
+const TIPOS_PASADA = { unica: 'Única', primera: 'Primera de dos', repaso: 'Repaso' };
+function tipoDePasada(p) {
+  const t = String(p.Pasada || '').toLowerCase();
+  if (t.startsWith('úni') || t.startsWith('uni')) return 'unica';
+  if (t.startsWith('prim')) return 'primera';
+  if (t.startsWith('rep')) return 'repaso';
+  if (String(p.Pasada) === '2') return 'repaso';
+  return listaParaPuertoPorHumedad(p) ? 'unica' : 'primera';
+}
+/* la humedad no se mide: se supone que cada pasada baja unos 2,5 puntos y que la última deja el grano en tolerancia */
+const PUNTOS_POR_PASADA = 2.5;
+function humedadesSupuestas(tipo, cereal) {
+  const tol = toleranciaPuerto(cereal);
+  return tipo === 'primera' ? [tol + 2 * PUNTOS_POR_PASADA, tol + PUNTOS_POR_PASADA] : [tol + PUNTOS_POR_PASADA, tol];
+}
+function listaParaPuerto(p) { return tipoDePasada(p) !== 'primera'; }
+function listaParaPuertoPorHumedad(p) {
   const hum = parseFloat(String(p.HumedadSalida).replace(',', '.'));
   if (isFinite(hum) && p.Cereal) return hum <= toleranciaPuerto(p.Cereal) + 1e-9;
   return p.DisponiblePuerto === 'SI';
@@ -1587,7 +1609,7 @@ function cargarPlanta(clave) {
   document.getElementById('opCircuito').style.display = datos.circuito ? '' : 'none';
   document.getElementById('opCircuito').setAttribute('aria-pressed', 'false');
   if (datos.circuito) marcarPrevio(datos.circuito.previo);
-  document.getElementById('grupoDemo').style.display = datos.circuito ? '' : 'none';
+  document.getElementById('grupoDemo').style.display = 'none';   /* la jornada de demostración ya no se usa */
   document.getElementById('kpis').style.display = datos.circuito ? '' : 'none';
   const c = datos.camara;
   foco.set(...c.foco); radio = c.radio; azim = c.azim; polar = c.polar;
@@ -1716,12 +1738,12 @@ function opSecar(chapas, humEntrada = 18.2, humSalida = 15.6, sentido = 'arriba'
     SiloOrigen: org.dato.id,
     Sentido: sentido,
     Chapas: +chapas.toFixed(2),
-    HumedadEntrada: humEntrada,
-    HumedadSalida: humSalida,
-    Pasada: pasada,
+    HumedadEntrada: '',          /* no se mide: queda vacío para no confundir un supuesto con un dato */
+    HumedadSalida: '',
+    Pasada: TIPOS_PASADA[pasada] || pasada,
     SiloDestino: idDestino,
     Toneladas: +tn.toFixed(2),
-    DisponiblePuerto: humSalida <= toleranciaPuerto(cereal) + 1e-9 ? 'SI' : 'NO'
+    DisponiblePuerto: pasada === 'primera' ? 'NO' : 'SI'
   });
 
   return tn; // valor real de esta pasada, sin recontar el cono
@@ -2125,7 +2147,7 @@ function pintarPaso() {
       const tnTotal = volumenSilo(it.fam, it.dato) * (DENSIDAD[it.dato.cereal] || 0.7);
       const copeteTxt = ' — ' + textoForma(it.dato.copete || 0) + ' → ' + textoForma(copeteFinalPaso);
       const dest = pintarDestinos(cerealCalc, tnMov);
-      kgEl.innerHTML = `Vas a mover ≈ ${num(tnMov * 1000, 0)} kg (${nombreCereal(cerealCalc)}, ${pasadaActual}° pasada${copeteTxt})<br>` +
+      kgEl.innerHTML = `Vas a mover ≈ ${num(tnMov * 1000, 0)} kg (${nombreCereal(cerealCalc)}, pasada ${TIPOS_PASADA[pasadaActual].toLowerCase()}${copeteTxt})<br>` +
         `Hay en total en el silo ${it.dato.id} ≈ ${num(tnTotal * 1000, 0)} kg` + (dest ? '<br>' + dest : '');
     } else {
       kgEl.textContent = '';
@@ -2144,7 +2166,7 @@ function pintarDestinos(cereal, tnMov) {
   const elegido = destinoManual !== null && valido(destinoManual) ? destinoManual : porDefecto;
   const opcion = (o, marcado) => `<option value="${o.id}"${o.otroCereal ? ' disabled' : ''}${marcado ? ' selected' : ''}>Silo ${o.id} · ${o.otroCereal ? 'tiene ' + nombreCereal(o.otroCereal).toLowerCase() : o.libre < 0.5 ? 'lleno' : 'lugar ≈ ' + num(o.libre) + ' tn'}</option>`;
   sel.innerHTML = lista.map(o => opcion(o, String(o.id) === String(elegido))).join('');
-  const hEnt = Number($('humEntrada').value) || 0, hSal = Number($('humSalida').value) || 0;
+  const [hEnt, hSal] = humedadesSupuestas(pasadaActual, cereal);
   const tnDest = tnSecas(tnMov, hEnt, hSal);
   const principal = lista.find(o => String(o.id) === String(sel.value));
   const libre1 = principal ? principal.libre : 0;
@@ -2162,7 +2184,6 @@ function pintarDestinos(cereal, tnMov) {
 }
 $('destinoPasada').onchange = e => { destinoManual = e.target.value; destino2Manual = ''; pintarPaso(); };
 $('destino2Pasada').onchange = e => { destino2Manual = e.target.value; pintarPaso(); };
-['humEntrada', 'humSalida'].forEach(id => $(id).addEventListener('input', () => pintarPaso()));
 $('menos').onclick = () => { chapasPaso = Math.max(0.5, chapasPaso - 0.5); pintarPaso(); };
 $('mas').onclick   = () => { chapasPaso = Math.min(11, chapasPaso + 0.5); pintarPaso(); };
 function marcarPrevio(id) {
@@ -2180,7 +2201,7 @@ function reflejarCopetePrevio() {
 $('prev3').onclick = () => { marcarPrevio(3); if ($('cerealPasada')) $('cerealPasada').value = 'maiz'; pintarTodo(); pintarPaso(); reflejarCopetePrevio(); };
 $('prev1').onclick = () => { marcarPrevio(1); if ($('cerealPasada')) $('cerealPasada').value = 'soja'; pintarTodo(); pintarPaso(); reflejarCopetePrevio(); };
 
-let pasadaActual = 1;
+let pasadaActual = 'unica';   /* tipo de pasada elegido */
 let ultimosDestinos = [];
 let destinoManual = null, destino2Manual = '';
 let copeteFinalPaso = -1;   /* al vaciar desde abajo, lo normal es que termine con el cono para abajo */
@@ -2210,8 +2231,14 @@ $('sentAbajo').onclick = () => marcarCopetePrevio(-1);
 $('finArriba').onclick = () => marcarCopeteFinal(1);
 $('finEnrasado').onclick = () => marcarCopeteFinal(0);
 $('finAbajo').onclick = () => marcarCopeteFinal(-1);
-$('pasada1').onclick = () => { pasadaActual = 1; $('pasada1').setAttribute('aria-pressed','true'); $('pasada2').setAttribute('aria-pressed','false'); pintarPaso(); };
-$('pasada2').onclick = () => { pasadaActual = 2; $('pasada2').setAttribute('aria-pressed','true'); $('pasada1').setAttribute('aria-pressed','false'); pintarPaso(); };
+function marcarTipoPasada(t) {
+  pasadaActual = t;
+  [['tipoUnica', 'unica'], ['tipoPrimera', 'primera'], ['tipoRepaso', 'repaso']].forEach(([id, v]) => $(id).setAttribute('aria-pressed', String(v === t)));
+  pintarPaso();
+}
+$('tipoUnica').onclick = () => marcarTipoPasada('unica');
+$('tipoPrimera').onclick = () => marcarTipoPasada('primera');
+$('tipoRepaso').onclick = () => marcarTipoPasada('repaso');
 if ($('cerealPasada')) $('cerealPasada').onchange = () => { destinoManual = null; destino2Manual = ''; pintarPaso(); };
 
 let moduloActual = 'cubicaje';
@@ -2240,10 +2267,9 @@ $('opCircuito').onclick = e => {
 };
 $('opIngreso').onclick = () => { opIngreso(chapasPaso); sincronizarCubicaje(SILOS_CIRCUITO); };
 $('opSecar').onclick   = () => {
-  const hEnt = Number($('humEntrada').value) || 18.2;
-  const hSal = Number($('humSalida').value) || 15.6;
   const fecha = $('fechaPasada').value || new Date().toISOString().slice(0, 10);
   const cerealElegido = $('cerealPasada') ? $('cerealPasada').value : null;
+  const [hEnt, hSal] = humedadesSupuestas(pasadaActual, cerealElegido || (porId(datos.circuito.previo) || { dato: {} }).dato.cereal);
   const itPrevio = porId(datos.circuito.previo);
   const sentidoLog = textoForma(itPrevio ? (itPrevio.dato.copete || 0) : 0) + ' → ' + textoForma(copeteFinalPaso);
   const principal = $('destinoPasada') && $('destinoPasada').value ? $('destinoPasada').value : null;
@@ -2361,7 +2387,7 @@ function pintarPasadasFiltradas(filas) {
     <table>
       <thead><tr>
         <th>Fecha</th><th>Cereal</th><th>Origen</th><th>Sentido</th><th>Chapas</th>
-        <th>H. ent.</th><th>H. sal.</th><th>Pasada</th><th>Destino</th><th>Toneladas</th><th>Puerto</th><th>Gas (kg)</th><th>Costo pasada (US$)</th><th></th>
+        <th>Pasada</th><th>Destino</th><th>Toneladas</th><th>Queda lista</th><th>Gas (kg)</th><th>Costo pasada (US$)</th><th></th>
       </tr></thead>
       <tbody>
         ${filas.slice().reverse().map((p, idx) => {
@@ -2370,8 +2396,8 @@ function pintarPasadasFiltradas(filas) {
           return `
           <tr data-idx="${idx}">
             <td>${p.Fecha||''}</td><td>${p.Cereal||''}</td><td>${p.SiloOrigen||''}</td><td>${p.Sentido||''}</td>
-            <td>${p.Chapas||''}</td><td>${p.HumedadEntrada||''}</td><td>${p.HumedadSalida||''}</td>
-            <td>${p.Pasada||''}</td><td>${p.SiloDestino||''}</td><td><b>${p.Toneladas||''} tn</b></td>
+            <td>${p.Chapas||''}</td>
+            <td>${TIPOS_PASADA[tipoDePasada(p)]}</td><td>${p.SiloDestino||''}</td><td><b>${p.Toneladas||''} tn</b></td>
             <td>${listaParaPuerto(p) ? 'Sí' : 'No'}</td>
             <td>${g ? num(g.kg) : '—'}</td>
             <td>${cuota ? 'US$ ' + num(cuota, 2) + (g.provisorio ? ' *' : '') : '—'}</td>
@@ -2423,7 +2449,7 @@ $('pasFiltroMes').onchange = () => { $('pasFiltroDesde').value = ''; $('pasFiltr
 $('pasDescargar').onclick = () => {
   const filas = filasFiltradas();
   if (!filas.length) { anotar('No hay pasadas para descargar con ese filtro'); return; }
-  const cols = ['Fecha','Cereal','SiloOrigen','Sentido','Chapas','HumedadEntrada','HumedadSalida','Pasada','SiloDestino','Toneladas','DisponiblePuerto'];
+  const cols = ['Fecha','Cereal','SiloOrigen','Sentido','Chapas','Pasada','SiloDestino','Toneladas','DisponiblePuerto'];
   const csv = [cols.join(';')].concat(
     filas.map(p => cols.map(c => String(p[c] ?? '').replace(/;/g, ',')).join(';'))
   ).join('\n');
@@ -2963,7 +2989,7 @@ function abrirElegirPasadas(id) {
   caja.hidden = false;
   caja.innerHTML = `<p><b>Pasadas del tramo ${fechaLegible(desde.fh)} → ${fechaLegible(l.fh)}</b> (bajaron ${num(intervalosGas(lecturasGas).find(t => t.hasta.ID === id).kg)} kg de gas). Marcá las que se secaron entre esas dos lecturas.</p>
     ${candidatas.length ? candidatas.map((p, k) => `<label style="display:block;margin:3px 0;"><input type="checkbox" data-k="${k}"${actuales.has(clavePasada(p)) ? ' checked' : ''}>
-      ${String(p.Fecha || '').slice(0, 10).split('-').reverse().join('/')} · ${p.Cereal || ''} · silo ${p.SiloOrigen || '—'} · ${p.Chapas || ''} chapas · ${p.Toneladas || ''} tn · ${p.Pasada || 1}° pasada</label>`).join('')
+      ${String(p.Fecha || '').slice(0, 10).split('-').reverse().join('/')} · ${p.Cereal || ''} · silo ${p.SiloOrigen || '—'} · ${p.Chapas || ''} chapas · ${p.Toneladas || ''} tn · pasada ${TIPOS_PASADA[tipoDePasada(p)].toLowerCase()}</label>`).join('')
       : '<p class="vacio">No hay pasadas registradas cerca de esas fechas.</p>'}
     <div class="gas-form"><button class="fuerte" id="elegirGuardar">Guardar</button><button class="mini" id="elegirAuto">Volver a automático (por fecha)</button><button class="mini" id="elegirCerrar">Cancelar</button></div>
     <p class="gas-estado" id="elegirEstado"></p>`;
@@ -3024,9 +3050,9 @@ function pintarGasPorCereal(pasadas) {
   porPasada.forEach((g, p) => {
     const mes = String(p.Fecha || '').slice(0, 7), cer = String(p.Cereal || '—');
     const k = mes + '|' + cer;
-    const r = grupos[k] || (grupos[k] = { mes, cer, kg: 0, costo: 0, tn: 0, tnListas: 0, tnPts: 0, pasadas: 0, sinPrecio: false, provisorio: false });
-    const tn = Number(p.Toneladas) || 0, pts = Number(p.HumedadEntrada) - Number(p.HumedadSalida);
-    r.kg += g.kg; r.costo += g.costo; r.tn += tn; r.tnPts += pts > 0 ? tn * pts : 0; r.pasadas++;
+    const r = grupos[k] || (grupos[k] = { mes, cer, kg: 0, costo: 0, tn: 0, tnListas: 0, pasadas: 0, sinPrecio: false, provisorio: false });
+    const tn = Number(p.Toneladas) || 0;
+    r.kg += g.kg; r.costo += g.costo; r.tn += tn; r.pasadas++;
     if (listaParaPuerto(p)) r.tnListas += tn;
     if (g.sinPrecio) r.sinPrecio = true; if (g.provisorio) r.provisorio = true;
   });
@@ -3041,17 +3067,16 @@ function pintarGasPorCereal(pasadas) {
   const despC = tnDespachadas().cereal;
   const tnDe = f => despC[f.mes + '|' + cerealDeReporte(f.cer)] || 0;
   $('gasPorCereal').innerHTML = `<div class="tabla-scroll"><table>
-    <thead><tr><th>Mes</th><th>Cereal</th><th>Pasadas</th><th>Gas (kg)</th><th>Tn por secadora</th><th>Tn listas para puerto</th><th>Kg gas / tn lista</th><th>Kg gas / tn·punto</th><th>Costo (US$)</th><th>Costo / tn lista (US$)</th><th>Costo / tn·punto (US$)</th><th>Tn despachadas</th><th>Kg gas / tn desp.</th><th>Costo / tn desp. (US$)</th></tr></thead>
+    <thead><tr><th>Mes</th><th>Cereal</th><th>Pasadas</th><th>Gas (kg)</th><th>Tn por secadora</th><th>Tn listas para puerto</th><th>Kg gas / tn lista</th><th>Costo (US$)</th><th>Costo / tn lista (US$)</th><th>Tn despachadas</th><th>Kg gas / tn desp.</th><th>Costo / tn desp. (US$)</th></tr></thead>
     <tbody>${meses.map(mes => filas.filter(f => f.mes === mes).map(f => {
       const marca = f.provisorio ? ' *' : '';
       return `<tr><td>${mes}</td><td>${f.cer}</td><td>${f.pasadas}</td><td><b>${num(f.kg)}</b></td><td>${num(f.tn, 1)}</td><td>${num(f.tnListas, 1)}</td>
-        <td><b>${f.tnListas ? num(f.kg / f.tnListas, 2) : '—'}</b></td><td>${f.tnPts ? num(f.kg / f.tnPts, 2) : '—'}</td>
+        <td><b>${f.tnListas ? num(f.kg / f.tnListas, 2) : '—'}</b></td>
         <td>${f.sinPrecio ? '—' : usd(f.costo, 2) + marca}</td><td><b>${!f.sinPrecio && f.tnListas ? usd(f.costo / f.tnListas, 2) + marca : '—'}</b></td>
-        <td><b>${!f.sinPrecio && f.tnPts ? usd(f.costo / f.tnPts, 3) + marca : '—'}</b></td>
         <td>${tnDe(f) ? num(tnDe(f), 2) : '—'}</td><td><b>${tnDe(f) ? num(f.kg / tnDe(f), 2) : '—'}</b></td>
         <td><b>${!f.sinPrecio && tnDe(f) ? usd(f.costo / tnDe(f), 2) + marca : '—'}</b></td></tr>`;
-    }).join('') + (sin[mes] ? `<tr><td>${mes}</td><td class="izq" colspan="2"><span class="alerta">Gas sin pasada registrada</span></td><td><b>${num(sin[mes].kg)}</b></td><td>—</td><td>—</td><td>—</td><td>—</td><td>${sin[mes].sinPrecio ? '—' : usd(sin[mes].costo, 2)}</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>` : '')).join('')}</tbody></table></div>
-    <p class="nota">Cada pasada se lleva el gas que bajó entre la lectura anterior y la siguiente, repartido según toneladas × puntos de humedad cuando hay más de una pasada en ese tramo. Por eso una tanda chica, con su encendido, sale más cara por tonelada que secar un silo entero de una vez. Cuando un grano pasa dos veces, las dos pasadas suman gas y puntos, pero el grano se cuenta una sola vez en "Tn listas" (la pasada que lo deja dentro de la tolerancia). "Costo / tn·punto" no depende de cuántas pasadas haga falta: costo de un lote = toneladas × puntos totales quitados × ese valor. "Gas sin pasada registrada" es gas que bajó entre dos lecturas sin ninguna pasada en el medio. Las columnas "desp." dividen el gas de cada cereal por lo que salió pesado de ese cereal en el mes; el reparto del gas entre cereales sale de las pasadas.</p>`;
+    }).join('') + (sin[mes] ? `<tr><td>${mes}</td><td class="izq" colspan="2"><span class="alerta">Gas sin pasada registrada</span></td><td><b>${num(sin[mes].kg)}</b></td><td>—</td><td>—</td><td>—</td><td>${sin[mes].sinPrecio ? '—' : usd(sin[mes].costo, 2)}</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>` : '')).join('')}</tbody></table></div>
+    <p class="nota">Cada pasada se lleva el gas que bajó entre la lectura anterior y la siguiente, repartido según toneladas cuando hay más de una pasada en ese tramo (la humedad no se mide: se supone que cada pasada saca unos 2,5 puntos). Por eso una tanda chica, con su encendido, sale más cara por tonelada que secar un silo entero de una vez. Cuando un grano pasa dos veces, las dos pasadas suman gas, pero el grano se cuenta una sola vez en "Tn listas": en la pasada Única o en el Repaso, nunca en la Primera de dos. "Gas sin pasada registrada" es gas que bajó entre dos lecturas sin ninguna pasada en el medio. Las columnas "desp." dividen el gas de cada cereal por lo que salió pesado de ese cereal en el mes; el reparto del gas entre cereales sale de las pasadas.</p>`;
 }
 
 async function subirPendientes() {
@@ -3209,15 +3234,12 @@ function costeoGas(lects, facts, precioDe = precioFactura) {
 
 /* ---- gas de cada pasada ----
    El gas que bajó entre dos lecturas se reparte entre las pasadas de ese tramo, en proporción a
-   toneladas × puntos de humedad quitados. Las pasadas guardan solo la fecha: se ubican al mediodía.
+   toneladas. Las pasadas guardan solo la fecha: se ubican al mediodía.
    Si en un tramo no hay pasadas, ese gas queda aparte ("sin pasada": arranques, pruebas, olvidos). */
 const fhPasada = p => String(p.Fecha || '').slice(0, 10) + ' 12:00';
 /* las pasadas no tienen ID: se identifican por sus datos */
 const clavePasada = p => [String(p.Fecha || '').slice(0, 10), p.Cereal, p.SiloOrigen, p.Chapas, p.Pasada, p.Toneladas].map(v => String(v ?? '').trim()).join('|');
-function pesoPasada(p) {
-  const tn = Number(p.Toneladas) || 0, pts = Number(p.HumedadEntrada) - Number(p.HumedadSalida);
-  return pts > 0 ? tn * pts : tn;
-}
+function pesoPasada(p) { return Number(p.Toneladas) || 0; }   /* cada pasada saca unos 2,5 puntos: se reparte por toneladas */
 function gasPorPasada(pasadas, lects, facts) {
   const cu = costeoGas(lects, facts, precioFacturaUSD);
   const tramos = cu ? cu.tramos : intervalosGas(lects).filter(it => it.kg > 0).map(it => ({ it, costo: null, provisorio: false }));
@@ -3374,7 +3396,6 @@ async function borrarFactura(id) {
 
 function pintarGasTabla(pasadas) {
   const listasPorMes = tnListasPorMes(pasadas);
-  const puntosPorMes = tnPuntosPorMes(pasadas);
   const relojes = resumenPorMes(lecturasGas);
   const enPesos = costeoGas(lecturasGas, facturasGas, precioFactura);
   const enDolares = costeoGas(lecturasGas, facturasGas, precioFacturaUSD);
@@ -3387,7 +3408,7 @@ function pintarGasTabla(pasadas) {
   const faltaTC = facturasGas.some(f => !(f.tc > 0));
   const hayProvisorio = enDolares && Object.values(enDolares.meses).some(m => m.provisorio);
   $('gasTabla').innerHTML = `<div class="tabla-scroll"><table>
-    <thead><tr><th>Mes</th><th>Consumo relojes (kg)</th><th>Balance con remitos (kg)</th><th>Costo del gas (US$)</th><th>Costo del gas ($)</th><th>Tn listas para puerto</th><th>Kg gas / tn</th><th>Kg gas / tn·punto</th><th>Costo / tn lista (US$)</th><th>Tn despachadas (balanza)</th><th>Kg gas / tn despachada</th><th>Costo / tn despachada (US$)</th></tr></thead>
+    <thead><tr><th>Mes</th><th>Consumo relojes (kg)</th><th>Balance con remitos (kg)</th><th>Costo del gas (US$)</th><th>Costo del gas ($)</th><th>Tn listas para puerto</th><th>Kg gas / tn lista</th><th>Costo / tn lista (US$)</th><th>Tn despachadas (balanza)</th><th>Kg gas / tn despachada</th><th>Costo / tn despachada (US$)</th></tr></thead>
     <tbody>${meses.map(mes => {
       const r = relojes[mes];
       const kg = r && r.intervalos ? r.relojKg : null;
@@ -3404,7 +3425,6 @@ function pintarGasTabla(pasadas) {
         <td>${costoP !== null ? plata(costoP) + marcaP : '—'}</td>
         <td>${num(listo, 2)} tn</td>
         <td><b>${kg && listo ? num(kg / listo, 2) : '—'}</b></td>
-        <td>${kg && puntosPorMes[mes] ? num(kg / puntosPorMes[mes], 2) : '—'}</td>
         <td><b>${costoU !== null && listo ? usd(costoU / listo, 2) + marcaU : '—'}</b></td>
         <td>${desp[mes] ? num(desp[mes], 2) : '—'}</td>
         <td><b>${kg && desp[mes] ? num(kg / desp[mes], 2) : '—'}</b></td>
@@ -3910,11 +3930,18 @@ function cargarDespachos(remoto) {
     .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.carta.localeCompare(b.carta));
 }
 
-/* procedencias que cuentan como la planta de la secadora (por defecto, las que dicen MONACO) */
+/* procedencias que cuentan como la planta de la secadora. Por defecto: las que dicen MONACO y CURA-CO
+   (a veces se carga desde Mónaco pero se pone CURA-CO para enganchar el flete del transportista).
+   PLANTA ACOND. F es otra planta (acondicionadora) y no cuenta. */
+const PROC_SECADORA = /M[OÓ]NACO|CURA-?\s?CO/i;
 const todasProcedencias = () => [...new Set([...despachos, ...importados.flatMap(i => i.viajes)].map(d => d.procedencia).filter(Boolean))].sort();
 function procedenciasSecadora() {
   const guardadas = lsLeer(LS_PROC, null);
-  return new Set(guardadas || todasProcedencias().filter(p => /M[OÓ]NACO/i.test(p)));
+  const base = todasProcedencias().filter(p => PROC_SECADORA.test(p));
+  if (!guardadas) return new Set(base);
+  /* procedencias nuevas que aparecen después de haber guardado la elección: entran si cumplen la regla */
+  const conocidas = new Set(lsLeer(LS_PROC + 'Vistas', guardadas));
+  return new Set([...guardadas, ...base.filter(p => !conocidas.has(p))]);
 }
 const deLaSecadora = d => procedenciasSecadora().has(d.procedencia);
 
@@ -4048,6 +4075,7 @@ function pintarFiltroProcedencias() {
   ).join('') || '<span class="vacio">Todavía no hay viajes importados.</span>';
   $('despProcedencias').querySelectorAll('[data-proc]').forEach(c => c.onchange = () => {
     lsGuardar(LS_PROC, [...$('despProcedencias').querySelectorAll('[data-proc]:checked')].map(x => x.dataset.proc));
+    lsGuardar(LS_PROC + 'Vistas', todasProcedencias());
     pintarDespachos();
   });
 }
@@ -4087,6 +4115,98 @@ function pintarDespachos() {
       <td class="solo-pantalla"><button class="mini" data-borrar-desp="${d.carta}">Borrar</button></td></tr>`).join('')}</tbody></table></div>`
     : '<p class="vacio">Sin viajes con estos filtros.</p>';
   $('despTabla').querySelectorAll('[data-borrar-desp]').forEach(b => b.onclick = () => borrarDespacho(b.dataset.borrarDesp));
+  pintarCruce(propios, f);
+}
+
+/* ---- cruce de los despachos por balanza con las salidas cargadas a mano en "Salidas y recorridas" ----
+   1) por número de carta de porte (acepta 000600008480, 0006-00008480 o solo 8480)
+   2) si la salida no tiene carta: mismo cereal, misma fecha (o un día de diferencia) y kg parecidos */
+const digitos = t => String(t || '').replace(/\D/g, '');
+function mismaCarta(cartaDesp, cartaSal) {
+  const a = digitos(cartaDesp), b = digitos(cartaSal);
+  if (!a || !b) return false;
+  if (Number(a) === Number(b)) return true;
+  return b.length <= 8 && Number(a.slice(-8)) === Number(b);   /* cargada solo con el número, sin el punto de venta */
+}
+const diasEntre = (f1, f2) => Math.abs((new Date(f1 + 'T00:00:00') - new Date(f2 + 'T00:00:00')) / 864e5);
+function cruzarDespachos(lista, f) {
+  const sal = salidasSilos.filter(s => s.planta === 'monaco' && (!f.mes || s.fecha.startsWith(f.mes)) && (!f.cereal || s.cereal === f.cereal));
+  const usadas = new Set(), pares = [], sinSalida = [];
+  lista.forEach(d => {
+    let s = sal.find(x => !usadas.has(x.ID) && mismaCarta(d.carta, x.carta)), por = 'carta de porte';
+    if (!s) {
+      s = sal.filter(x => !usadas.has(x.ID) && !digitos(x.carta) && x.cereal === d.cereal && diasEntre(x.fecha, d.fecha) <= 1 && Math.abs(x.kg - d.kg) <= 100)
+        .sort((a, b) => Math.abs(a.kg - d.kg) - Math.abs(b.kg - d.kg))[0];
+      por = 'fecha y kg';
+    }
+    if (s) { usadas.add(s.ID); pares.push({ d, s, por }); } else sinSalida.push(d);
+  });
+  /* salidas cargadas que no aparecen en ningún reporte (con el filtro de tipo puesto no se muestran: no tienen tipo) */
+  const sinDespacho = f.tipo ? [] : sal.filter(s => !usadas.has(s.ID));
+  return { pares, sinSalida, sinDespacho };
+}
+const dondeSalida = s => s.silo ? nombreDeClave(s.silo)
+  : Object.keys(s.asignado).length ? Object.keys(s.asignado).map(nombreDeClave).join(' + ') + ' (recorrida)' : 'sin confirmar';
+
+function pintarCruce(lista, f) {
+  const caja = $('despCruce');
+  if (!lista.length && !salidasSilos.length) { caja.innerHTML = ''; return; }
+  const { pares, sinSalida, sinDespacho } = cruzarDespachos(lista, f);
+  const difKg = pares.filter(p => Math.abs(p.d.kg - p.s.kg) >= 1);
+  const kg = arr => arr.reduce((a, x) => a + x.kg, 0);
+  const totDesp = kg(lista), totSal = kg(pares.map(p => p.s)) + kg(sinDespacho);
+  caja.innerHTML = `
+    <div class="kpis-cruce" style="display:flex;gap:18px;flex-wrap:wrap;margin:4px 0 8px;font-size:13px;">
+      <div>Despachado por balanza: <b>${tnDesp(totDesp)} tn</b> (${lista.length} viajes)</div>
+      <div>Cargado en la app como salidas: <b>${tnDesp(totSal)} tn</b> (${pares.length + sinDespacho.length})</div>
+      <div>Diferencia: <b class="${Math.abs(totDesp - totSal) >= 1 ? 'alerta' : ''}">${tnDesp(totDesp - totSal)} tn</b></div>
+    </div>
+    <div class="tabla-scroll"><table>
+      <thead><tr><th>Situación</th><th>Viajes</th><th>Tn</th><th>Qué hacer</th></tr></thead>
+      <tbody>
+        <tr><td class="izq">Coinciden (despacho y salida cargada)</td><td>${pares.length}</td><td>${tnDesp(kg(pares.map(p => p.d)))}</td><td class="izq">${difKg.length ? `<span class="alerta">${difKg.length} con kg distintos a la balanza</span>` : 'Nada'}</td></tr>
+        <tr><td class="izq">Despachados por balanza y no cargados en la app</td><td>${sinSalida.length}</td><td>${tnDesp(kg(sinSalida))}</td>
+          <td class="izq">${sinSalida.length ? `<button class="mini solo-pantalla" id="cruceCargar">Cargarlos como salidas sin confirmar</button>` : 'Nada'}</td></tr>
+        <tr><td class="izq">Cargados en la app y no están en ningún reporte</td><td>${sinDespacho.length}</td><td>${tnDesp(kg(sinDespacho))}</td>
+          <td class="izq">${sinDespacho.length ? 'Revisar: otro mes, carta mal escrita o reporte sin importar' : 'Nada'}</td></tr>
+      </tbody></table></div>
+    ${difKg.length || sinSalida.length || sinDespacho.length ? `<details class="gas-detalle"${difKg.length + sinSalida.length + sinDespacho.length <= 15 ? ' open' : ''}><summary>Detalle (${difKg.length + sinSalida.length + sinDespacho.length} viajes para revisar)</summary><div class="tabla-scroll"><table>
+      <thead><tr><th>Situación</th><th>Fecha</th><th>Cereal</th><th>Carta de porte</th><th>Kg balanza</th><th>Kg cargados</th><th>Salió de (app)</th><th class="solo-pantalla"></th></tr></thead>
+      <tbody>
+        ${difKg.map(p => `<tr><td class="izq"><span class="alerta">Kg distintos</span></td><td>${fechaCorta(p.d.fecha)}</td><td>${nombreCereal(p.d.cereal)}</td><td>${p.d.carta}</td><td>${num(p.d.kg)}</td><td>${num(p.s.kg)}</td><td class="izq">${dondeSalida(p.s)}</td>
+          <td class="solo-pantalla"><button class="mini" data-corregir-kg="${p.s.ID}" data-kg="${p.d.kg}" data-carta="${p.d.carta}">Usar kg de balanza</button></td></tr>`).join('')}
+        ${sinSalida.map(d => `<tr><td class="izq">No cargado en la app</td><td>${fechaCorta(d.fecha)}</td><td>${nombreCereal(d.cereal)}</td><td>${d.carta}</td><td>${num(d.kg)}</td><td>—</td><td>—</td><td></td></tr>`).join('')}
+        ${sinDespacho.map(s => `<tr><td class="izq">Sin despacho</td><td>${fechaCorta(s.fecha)}</td><td>${nombreCereal(s.cereal)}</td><td>${s.carta || '—'}</td><td>—</td><td>${num(s.kg)}</td><td class="izq">${dondeSalida(s)}</td><td></td></tr>`).join('')}
+      </tbody></table></div></details>` : ''}
+    <p class="nota">Se cruzan por número de carta de porte; si la salida se cargó sin carta, por cereal, fecha (±1 día) y kg (±100). Solo planta Mónaco. Los despachos que se cargan desde acá quedan como salidas "sin confirmar": no tocan el cubicaje hasta que confirmes de qué silo salieron o hagas una recorrida, en "Salidas y recorridas".</p>`;
+  if ($('cruceCargar')) $('cruceCargar').onclick = () => cargarComoSalidas(sinSalida);
+  caja.querySelectorAll('[data-corregir-kg]').forEach(b => b.onclick = () => corregirKgSalida(b.dataset.corregirKg, +b.dataset.kg, b.dataset.carta));
+}
+
+async function cargarComoSalidas(lista) {
+  if (!confirm(`¿Cargar ${lista.length} viajes (${tnDesp(lista.reduce((a, d) => a + d.kg, 0))} tn) como salidas sin confirmar de la planta Mónaco?`)) return;
+  /* el ID se arma con la carta de porte: si se repite el botón, no se duplican */
+  const nuevas = lista.map(d => ({ ID: 'D' + d.carta, fecha: d.fecha, cereal: d.cereal, kg: d.kg, silo: '', planta: 'monaco',
+    carta: d.carta, notas: `Desde despacho por balanza (${TIPOS_DESPACHO[d.tipo].toLowerCase()})`, asignado: {} }));
+  estadoDesp('Cargando salidas…');
+  const res = await postSheet('SalidasSilos', 'upsertMany', { filas: nuevas.map(filaSalida) }, 'ID');
+  if (!subidaOk(res)) { estadoDesp('No se pudieron cargar en la pestaña SalidasSilos' + (res && res.error ? ` (${res.error})` : '') + '.', true); return; }
+  const remoto = await fetchSheet();
+  if (remoto) cargarSalidasRecorridas(remoto);
+  anotar(`${nuevas.length} despachos cargados como salidas sin confirmar`);
+  estadoDesp(`Listo: ${nuevas.length} salidas cargadas como sin confirmar. Se reparten en la próxima recorrida, o confirmá el silo en "Salidas y recorridas".`);
+  pintarDespachos();
+}
+
+async function corregirKgSalida(id, kg, carta) {
+  const s = salidasSilos.find(x => x.ID === id);
+  if (!s || !confirm(`¿Cambiar la salida cargada de ${num(s.kg)} kg a ${num(kg)} kg (balanza, carta ${carta})?${s.silo ? ' El silo ya se descontó con el valor anterior: la próxima recorrida lo corrige.' : ''}`)) return;
+  const previo = s.kg;
+  s.kg = kg; if (!digitos(s.carta)) s.carta = carta;
+  const res = await postSheet('SalidasSilos', 'upsert', filaSalida(s), 'ID');
+  if (!subidaOk(res)) { s.kg = previo; estadoDesp('No se pudo guardar en la Sheet. Probá de nuevo.', true); return; }
+  estadoDesp('Kg corregidos con el dato de balanza.');
+  pintarDespachos();
 }
 
 async function abrirDespachos() {
@@ -4094,7 +4214,7 @@ async function abrirDespachos() {
   estadoDesp('');
   $('despResumen').innerHTML = '<p class="vacio">Cargando…</p>';
   const remoto = await fetchSheet();
-  if (remoto) cargarDespachos(remoto);
+  if (remoto) { cargarDespachos(remoto); cargarSalidasRecorridas(remoto); }
   pintarDespachos();
 }
 
@@ -4103,7 +4223,7 @@ $('despArchivo').addEventListener('change', e => { if (e.target.files.length) im
 $('despMes').addEventListener('change', () => { $('despMes').dataset.tocado = '1'; pintarDespachos(); });
 $('despGuardar').onclick = guardarImportados;
 $('opDespachos').onclick = abrirDespachos;
-$('opDespachos2').onclick = abrirDespachos;
+$('opRecorridaCierre').onclick = () => { if (planta !== 'monaco') cargarPlanta('monaco'); abrirSalidas(); };
 $('despCerrar').onclick = () => document.getElementById('modalDespachos').classList.remove('abierto');
 $('despImprimir').onclick = () => window.print();
 
