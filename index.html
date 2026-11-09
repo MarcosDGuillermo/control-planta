@@ -321,6 +321,7 @@
     <div class="botones">
       <button id="opCubicaje">Ver informe</button>
       <button id="opSalidas">Salidas y recorridas</button>
+      <button id="opDespachos2">Despachos por balanza</button>
     </div>
   </div>
   <div class="grupo" id="grupoInformeSecado">
@@ -328,6 +329,7 @@
     <div class="botones">
       <button id="opPasadas">Ver pasadas</button>
       <button id="opGas">Consumo de gas</button>
+      <button id="opDespachos">Despachos por balanza</button>
     </div>
   </div>
   <div class="grupo" id="grupoDemo">
@@ -464,6 +466,43 @@
     <div class="mandos">
       <button class="imprimir" id="salImprimir">Imprimir</button>
       <button class="cerrar" id="salCerrar">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<div class="cubicaje" id="modalDespachos">
+  <div class="hoja">
+    <img data-logo alt="Cereales Lobería" style="width:60px;height:60px;display:block;margin-bottom:8px;">
+    <h2>Despachos por balanza</h2>
+    <p class="sub">Salidas por venta y retiros de productor, tal como los informa el sistema del acopio. Es el dato pesado del mes: con él se calcula el gas por tonelada despachada.</p>
+
+    <h3 class="gas-h solo-pantalla" style="margin-top:6px;">Importar reportes</h3>
+    <div class="gas-form solo-pantalla">
+      <label>Reporte de Productor (PDF, se pueden elegir varios)
+        <input type="file" id="despArchivo" accept="application/pdf,.pdf" multiple>
+      </label>
+      <button class="fuerte" id="despGuardar" hidden>Guardar en la Sheet</button>
+    </div>
+    <p class="nota solo-pantalla" style="margin-top:0;">El tipo (venta o retiro) se toma del nombre del archivo: si dice "Retiro" es retiro de productor. Revisalo antes de guardar. Si un viaje ya estaba cargado, se actualiza: no se duplica.</p>
+    <div id="despImportados" class="solo-pantalla"></div>
+    <p class="gas-estado" id="despEstado"></p>
+
+    <h3 class="gas-h">Resumen</h3>
+    <div class="gas-form">
+      <label>Mes <select id="despMes"></select></label>
+      <label>Cereal <select id="despCereal"><option value="">Todos</option><option value="maiz">Maíz</option><option value="soja">Soja</option><option value="trigo">Trigo</option><option value="cebada">Cebada forrajera</option><option value="cervecera">Cebada cervecera</option><option value="girasol">Girasol</option></select></label>
+      <label>Tipo <select id="despTipo"><option value="">Venta y retiro</option><option value="venta">Venta</option><option value="retiro">Retiro productor</option></select></label>
+    </div>
+    <div class="nota" style="margin:2px 0 8px;"><b>Procedencias de la planta de la secadora</b> (las que cuentan para el gas):<br><span id="despProcedencias"></span></div>
+    <div id="despResumen"></div>
+
+    <h3 class="gas-h">Viajes</h3>
+    <div id="despTabla"></div>
+    <p class="pie">Kg netos según el reporte del sistema. La humedad es la que figura en cada carta de porte. Los viajes de procedencias no marcadas se muestran en gris y no entran en el cálculo del gas.</p>
+
+    <div class="mandos">
+      <button class="imprimir" id="despImprimir">Imprimir</button>
+      <button class="cerrar" id="despCerrar">Cerrar</button>
     </div>
   </div>
 </div>
@@ -2999,16 +3038,20 @@ function pintarGasPorCereal(pasadas) {
     return;
   }
   const meses = [...new Set([...filas.map(f => f.mes), ...Object.keys(sin)])].sort().reverse();
+  const despC = tnDespachadas().cereal;
+  const tnDe = f => despC[f.mes + '|' + cerealDeReporte(f.cer)] || 0;
   $('gasPorCereal').innerHTML = `<div class="tabla-scroll"><table>
-    <thead><tr><th>Mes</th><th>Cereal</th><th>Pasadas</th><th>Gas (kg)</th><th>Tn por secadora</th><th>Tn listas para puerto</th><th>Kg gas / tn lista</th><th>Kg gas / tn·punto</th><th>Costo (US$)</th><th>Costo / tn lista (US$)</th><th>Costo / tn·punto (US$)</th></tr></thead>
+    <thead><tr><th>Mes</th><th>Cereal</th><th>Pasadas</th><th>Gas (kg)</th><th>Tn por secadora</th><th>Tn listas para puerto</th><th>Kg gas / tn lista</th><th>Kg gas / tn·punto</th><th>Costo (US$)</th><th>Costo / tn lista (US$)</th><th>Costo / tn·punto (US$)</th><th>Tn despachadas</th><th>Kg gas / tn desp.</th><th>Costo / tn desp. (US$)</th></tr></thead>
     <tbody>${meses.map(mes => filas.filter(f => f.mes === mes).map(f => {
       const marca = f.provisorio ? ' *' : '';
       return `<tr><td>${mes}</td><td>${f.cer}</td><td>${f.pasadas}</td><td><b>${num(f.kg)}</b></td><td>${num(f.tn, 1)}</td><td>${num(f.tnListas, 1)}</td>
         <td><b>${f.tnListas ? num(f.kg / f.tnListas, 2) : '—'}</b></td><td>${f.tnPts ? num(f.kg / f.tnPts, 2) : '—'}</td>
         <td>${f.sinPrecio ? '—' : usd(f.costo, 2) + marca}</td><td><b>${!f.sinPrecio && f.tnListas ? usd(f.costo / f.tnListas, 2) + marca : '—'}</b></td>
-        <td><b>${!f.sinPrecio && f.tnPts ? usd(f.costo / f.tnPts, 3) + marca : '—'}</b></td></tr>`;
-    }).join('') + (sin[mes] ? `<tr><td>${mes}</td><td class="izq" colspan="2"><span class="alerta">Gas sin pasada registrada</span></td><td><b>${num(sin[mes].kg)}</b></td><td>—</td><td>—</td><td>—</td><td>—</td><td>${sin[mes].sinPrecio ? '—' : usd(sin[mes].costo, 2)}</td><td>—</td><td>—</td></tr>` : '')).join('')}</tbody></table></div>
-    <p class="nota">Cada pasada se lleva el gas que bajó entre la lectura anterior y la siguiente, repartido según toneladas × puntos de humedad cuando hay más de una pasada en ese tramo. Por eso una tanda chica, con su encendido, sale más cara por tonelada que secar un silo entero de una vez. Cuando un grano pasa dos veces, las dos pasadas suman gas y puntos, pero el grano se cuenta una sola vez en "Tn listas" (la pasada que lo deja dentro de la tolerancia). "Costo / tn·punto" no depende de cuántas pasadas haga falta: costo de un lote = toneladas × puntos totales quitados × ese valor. "Gas sin pasada registrada" es gas que bajó entre dos lecturas sin ninguna pasada en el medio.</p>`;
+        <td><b>${!f.sinPrecio && f.tnPts ? usd(f.costo / f.tnPts, 3) + marca : '—'}</b></td>
+        <td>${tnDe(f) ? num(tnDe(f), 2) : '—'}</td><td><b>${tnDe(f) ? num(f.kg / tnDe(f), 2) : '—'}</b></td>
+        <td><b>${!f.sinPrecio && tnDe(f) ? usd(f.costo / tnDe(f), 2) + marca : '—'}</b></td></tr>`;
+    }).join('') + (sin[mes] ? `<tr><td>${mes}</td><td class="izq" colspan="2"><span class="alerta">Gas sin pasada registrada</span></td><td><b>${num(sin[mes].kg)}</b></td><td>—</td><td>—</td><td>—</td><td>—</td><td>${sin[mes].sinPrecio ? '—' : usd(sin[mes].costo, 2)}</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>` : '')).join('')}</tbody></table></div>
+    <p class="nota">Cada pasada se lleva el gas que bajó entre la lectura anterior y la siguiente, repartido según toneladas × puntos de humedad cuando hay más de una pasada en ese tramo. Por eso una tanda chica, con su encendido, sale más cara por tonelada que secar un silo entero de una vez. Cuando un grano pasa dos veces, las dos pasadas suman gas y puntos, pero el grano se cuenta una sola vez en "Tn listas" (la pasada que lo deja dentro de la tolerancia). "Costo / tn·punto" no depende de cuántas pasadas haga falta: costo de un lote = toneladas × puntos totales quitados × ese valor. "Gas sin pasada registrada" es gas que bajó entre dos lecturas sin ninguna pasada en el medio. Las columnas "desp." dividen el gas de cada cereal por lo que salió pesado de ese cereal en el mes; el reparto del gas entre cereales sale de las pasadas.</p>`;
 }
 
 async function subirPendientes() {
@@ -3101,6 +3144,7 @@ async function abrirGas() {
   if (remoto) {
     cargarLecturasGas(remoto);
     cargarFacturasGas(remoto);
+    cargarDespachos(remoto);
     gasCache = remoto.ConsumoGas || [];
     pasadasCache = remoto.PasadasSecado || [];
   }
@@ -3334,6 +3378,7 @@ function pintarGasTabla(pasadas) {
   const relojes = resumenPorMes(lecturasGas);
   const enPesos = costeoGas(lecturasGas, facturasGas, precioFactura);
   const enDolares = costeoGas(lecturasGas, facturasGas, precioFacturaUSD);
+  const desp = tnDespachadas().mes;
   const meses = [...new Set([...Object.keys(listasPorMes), ...Object.keys(relojes)])].filter(Boolean).sort().reverse();
   if (!meses.length) {
     $('gasTabla').innerHTML = '<p class="vacio">Todavía no hay datos. Cargá una lectura de los relojes.</p>';
@@ -3342,7 +3387,7 @@ function pintarGasTabla(pasadas) {
   const faltaTC = facturasGas.some(f => !(f.tc > 0));
   const hayProvisorio = enDolares && Object.values(enDolares.meses).some(m => m.provisorio);
   $('gasTabla').innerHTML = `<div class="tabla-scroll"><table>
-    <thead><tr><th>Mes</th><th>Consumo relojes (kg)</th><th>Balance con remitos (kg)</th><th>Costo del gas (US$)</th><th>Costo del gas ($)</th><th>Tn listas para puerto</th><th>Kg gas / tn</th><th>Kg gas / tn·punto</th><th>Costo / tn lista (US$)</th></tr></thead>
+    <thead><tr><th>Mes</th><th>Consumo relojes (kg)</th><th>Balance con remitos (kg)</th><th>Costo del gas (US$)</th><th>Costo del gas ($)</th><th>Tn listas para puerto</th><th>Kg gas / tn</th><th>Kg gas / tn·punto</th><th>Costo / tn lista (US$)</th><th>Tn despachadas (balanza)</th><th>Kg gas / tn despachada</th><th>Costo / tn despachada (US$)</th></tr></thead>
     <tbody>${meses.map(mes => {
       const r = relojes[mes];
       const kg = r && r.intervalos ? r.relojKg : null;
@@ -3361,11 +3406,15 @@ function pintarGasTabla(pasadas) {
         <td><b>${kg && listo ? num(kg / listo, 2) : '—'}</b></td>
         <td>${kg && puntosPorMes[mes] ? num(kg / puntosPorMes[mes], 2) : '—'}</td>
         <td><b>${costoU !== null && listo ? usd(costoU / listo, 2) + marcaU : '—'}</b></td>
+        <td>${desp[mes] ? num(desp[mes], 2) : '—'}</td>
+        <td><b>${kg && desp[mes] ? num(kg / desp[mes], 2) : '—'}</b></td>
+        <td><b>${costoU !== null && desp[mes] ? usd(costoU / desp[mes], 2) + marcaU : '—'}</b></td>
       </tr>`;
     }).join('')}</tbody></table></div>
     <p class="nota">${enDolares
       ? `Precio promedio del gas que hay hoy en los tubos: <b>${usd(enDolares.precioActual, 3)} por kg</b>${enPesos ? ` (${plata(enPesos.precioActual, 2)} por kg)` : ''}.${hayProvisorio ? ' * Provisorio: falta la factura o el tipo de cambio de alguna carga.' : ''}`
-      : (facturasGas.length ? 'Para ver costos en dólares, cargá el tipo de cambio en las facturas.' : 'Para ver costos, cargá la factura de al menos una carga del camión.')}${faltaTC && enDolares ? ' Hay facturas sin tipo de cambio: completalo para que el costo en dólares sea exacto.' : ''}</p>`;
+      : (facturasGas.length ? 'Para ver costos en dólares, cargá el tipo de cambio en las facturas.' : 'Para ver costos, cargá la factura de al menos una carga del camión.')}${faltaTC && enDolares ? ' Hay facturas sin tipo de cambio: completalo para que el costo en dólares sea exacto.' : ''}
+    "Tn despachadas" son las salidas por venta y los retiros de productor de la planta de la secadora, pesados en balanza (pantalla "Despachos por balanza"). Es el dato objetivo: el gas del mes, medido con los relojes, dividido por lo que salió pesado. Incluye grano que entró seco y no pasó por la secadora.</p>`;
 }
 
 /* eventos de la pantalla de gas (lecturas y parámetros de los tubos) */
@@ -3777,6 +3826,287 @@ $('opSalidas').onclick = abrirSalidas;
 $('salCerrar').onclick = () => document.getElementById('modalSalidas').classList.remove('abierto');
 $('salImprimir').onclick = () => window.print();
 
+/* ---- lectura de los "Reporte de Productor" del sistema del acopio (PDF impreso) ----
+   Recibe las páginas como listas de textos con su posición {str, x, y} y devuelve los viajes. */
+const CEREAL_REPORTE = [[/SOJA/, 'soja'], [/MA[IÍ]Z/, 'maiz'], [/TRIGO/, 'trigo'], [/GIRASOL/, 'girasol'],
+  [/CERVECERA/, 'cervecera'], [/CEBADA/, 'cebada']];
+function cerealDeReporte(t) {
+  const u = String(t || '').toUpperCase();
+  const c = CEREAL_REPORTE.find(([re]) => re.test(u));
+  return c ? c[1] : u.toLowerCase();
+}
+const numReporte = t => Number(String(t).replace(/,/g, ''));   /* el reporte usa coma de miles: -31,220 */
+function leerReporteBalanza(paginas) {
+  const viajes = [], avisos = [];
+  let cerealCab = '', desde = '', hasta = '', totalNeto = null;
+  paginas.forEach((items, nPag) => {
+    const lineas = [];
+    items.filter(i => String(i.str).trim()).sort((a, b) => b.y - a.y || a.x - b.x).forEach(i => {
+      const l = lineas.find(l => Math.abs(l.y - i.y) <= 3);
+      if (l) l.items.push(i); else lineas.push({ y: i.y, items: [i] });
+    });
+    lineas.forEach(l => l.items.sort((a, b) => a.x - b.x));
+    /* encabezado de columnas de esta página */
+    const cab = lineas.find(l => ['Procedencia', 'Destino', 'Neto'].every(t => l.items.some(i => i.str.trim() === t)));
+    if (!cab) return;
+    const col = {};
+    cab.items.forEach(i => { const t = i.str.trim(); if (!(t in col)) col[t] = i.x; });
+    const columnas = Object.entries(col);
+    const nombreCol = x => columnas.reduce((m, [n, cx]) => Math.abs(cx - x) < Math.abs(m[1] - x) ? [n, cx] : m, ['', 1e9])[0];
+    lineas.forEach(l => {
+      const texto = l.items.map(i => i.str).join(' ');
+      if (!cerealCab) { const i = l.items.findIndex(x => x.str.trim() === 'Cereal:'); if (i >= 0 && l.items[i + 1]) cerealCab = l.items[i + 1].str.trim(); }
+      const per = texto.match(/desde\s+(\d{2}\/\d{2}\/\d{4})\s+hasta\s+(\d{2}\/\d{2}\/\d{4})/i);
+      if (per) { desde = per[1]; hasta = per[2]; }
+      if (/^SALIDAS/i.test(l.items[0].str.trim())) {
+        const nums = l.items.slice(1).map(i => i.str.trim()).filter(t => /^-?[\d,]+$/.test(t));
+        if (nums.length >= 3) totalNeto = Math.abs(numReporte(nums[2]));
+      }
+      const fc = texto.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{12})/);
+      if (!fc || l === cab) return;
+      const campo = n => l.items.filter(i => nombreCol(i.x) === n).map(i => i.str.trim()).join(' ').trim();
+      const netoTxt = l.items.map(i => i.str.trim()).find(t => /^-?\d{1,3}(,\d{3})+$|^-?\d+$/.test(t) && nombreCol(l.items.find(i => i.str.trim() === t).x) === 'Neto');
+      const humTxt = l.items.map(i => i.str.trim()).find(t => /^\d+\.\d+$/.test(t));
+      const v = {
+        fecha: `${fc[3]}-${fc[2]}-${fc[1]}`, carta: fc[4],
+        cereal: cerealDeReporte(campo('Cereal') || cerealCab),
+        fletero: campo('Fletero'), patente: campo('Chasis / Acoplado'),
+        procedencia: campo('Procedencia'), destino: campo('Destino'),
+        kg: netoTxt ? Math.abs(numReporte(netoTxt)) : 0, humedad: humTxt ? Number(humTxt) : ''
+      };
+      if (!v.kg) avisos.push(`Carta de porte ${v.carta}: no se pudo leer el neto (página ${nPag + 1}).`);
+      viajes.push(v);
+    });
+  });
+  const suma = viajes.reduce((a, v) => a + v.kg, 0);
+  return { viajes, cereal: cerealDeReporte(cerealCab), desde, hasta, totalNeto, suma, avisos,
+    cuadra: totalNeto === null ? null : Math.abs(totalNeto - suma) < 1 };
+}
+
+/* ============================================================
+   DESPACHOS POR BALANZA (salidas por venta y retiros de productor)
+   Se importan los "Reporte de Productor" que imprime el sistema del acopio (PDF).
+   Es el dato objetivo del mes: con él se calcula el gas por tonelada despachada.
+   ============================================================ */
+let despachos = [];
+let importados = [];          /* reportes leídos y todavía no guardados */
+const TIPOS_DESPACHO = { venta: 'Venta', retiro: 'Retiro productor' };
+const LS_PROC = 'procedenciasSecadora';
+
+function normDespacho(r) {
+  const t = String(r.Tipo || '').toLowerCase();
+  return {
+    carta: String(r.CartaPorte || '').trim(), fecha: String(r.Fecha || '').slice(0, 10),
+    tipo: t.includes('retiro') ? 'retiro' : 'venta', cereal: cerealDeReporte(r.Cereal),
+    procedencia: String(r.Procedencia || '').trim(), destino: String(r.Destino || '').trim(),
+    kg: Number(r.Kg) || 0, humedad: r.Humedad === '' || r.Humedad === undefined ? '' : Number(r.Humedad),
+    fletero: String(r.Fletero || ''), patente: String(r.Patente || ''), archivo: String(r.Archivo || '')
+  };
+}
+const filaDespacho = d => ({ CartaPorte: d.carta, Fecha: d.fecha, Tipo: TIPOS_DESPACHO[d.tipo], Cereal: nombreCereal(d.cereal),
+  Procedencia: d.procedencia, Destino: d.destino, Kg: d.kg, Humedad: d.humedad, Fletero: d.fletero, Patente: d.patente, Archivo: d.archivo });
+function cargarDespachos(remoto) {
+  despachos = ((remoto && remoto.Despachos) || []).map(normDespacho).filter(d => d.carta && d.kg > 0)
+    .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.carta.localeCompare(b.carta));
+}
+
+/* procedencias que cuentan como la planta de la secadora (por defecto, las que dicen MONACO) */
+const todasProcedencias = () => [...new Set([...despachos, ...importados.flatMap(i => i.viajes)].map(d => d.procedencia).filter(Boolean))].sort();
+function procedenciasSecadora() {
+  const guardadas = lsLeer(LS_PROC, null);
+  return new Set(guardadas || todasProcedencias().filter(p => /M[OÓ]NACO/i.test(p)));
+}
+const deLaSecadora = d => procedenciasSecadora().has(d.procedencia);
+
+/* toneladas despachadas de la planta de la secadora: { 'AAAA-MM': tn } y { 'AAAA-MM|cereal': tn } */
+function tnDespachadas() {
+  const mes = {}, cereal = {};
+  despachos.filter(deLaSecadora).forEach(d => {
+    const m = d.fecha.slice(0, 7), tn = d.kg / 1000;
+    mes[m] = (mes[m] || 0) + tn;
+    cereal[m + '|' + d.cereal] = (cereal[m + '|' + d.cereal] || 0) + tn;
+  });
+  return { mes, cereal };
+}
+
+/* ---- lectura del PDF (pdf.js se baja la primera vez que se usa) ---- */
+const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+let pdfjsListo = null;
+function cargarPdfjs() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if (pdfjsListo) return pdfjsListo;
+  pdfjsListo = new Promise((ok, mal) => {
+    const sc = document.createElement('script');
+    sc.src = PDFJS + 'pdf.min.js';
+    sc.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js'; ok(window.pdfjsLib); };
+    sc.onerror = () => { pdfjsListo = null; mal(new Error('No se pudo bajar el lector de PDF: revisá la conexión.')); };
+    document.head.appendChild(sc);
+  });
+  return pdfjsListo;
+}
+async function leerPdf(archivo) {
+  const lib = await cargarPdfjs();
+  const doc = await lib.getDocument({ data: new Uint8Array(await archivo.arrayBuffer()) }).promise;
+  const paginas = [];
+  for (let n = 1; n <= doc.numPages; n++) {
+    const tc = await (await doc.getPage(n)).getTextContent();
+    paginas.push(tc.items.map(i => ({ str: i.str, x: i.transform[4], y: i.transform[5] })));
+  }
+  return paginas;
+}
+
+function estadoDesp(msg, mal) { $('despEstado').textContent = msg; $('despEstado').classList.toggle('mal', !!mal); }
+const fechaCorta = f => f ? f.split('-').reverse().join('/') : '—';
+const tnDesp = kg => num(kg / 1000, 2);
+
+async function importarArchivos(lista) {
+  estadoDesp('Leyendo…');
+  for (const f of lista) {
+    try {
+      const r = leerReporteBalanza(await leerPdf(f));
+      if (!r.viajes.length) { estadoDesp(`${f.name}: no encontré viajes. ¿Es un "Reporte de Productor" del sistema?`, true); continue; }
+      const tipo = /retiro/i.test(f.name) ? 'retiro' : 'venta';
+      r.viajes.forEach(v => { v.tipo = tipo; v.archivo = f.name; });
+      importados = importados.filter(i => i.nombre !== f.name).concat({ nombre: f.name, tipo, ...r });
+      estadoDesp('');
+    } catch (e) {
+      estadoDesp(`${f.name}: ${e.message || 'no se pudo leer'}`, true);
+    }
+  }
+  $('despArchivo').value = '';
+  pintarDespachos();
+}
+
+function pintarImportados() {
+  const caja = $('despImportados');
+  if (!importados.length) { caja.innerHTML = ''; $('despGuardar').hidden = true; return; }
+  const yaCargadas = new Set(despachos.map(d => d.carta));
+  caja.innerHTML = `<div class="tabla-scroll"><table>
+    <thead><tr><th>Archivo</th><th>Tipo</th><th>Cereal</th><th>Período</th><th>Viajes</th><th>Kg</th><th>Control</th><th>Nuevos</th><th class="solo-pantalla"></th></tr></thead>
+    <tbody>${importados.map((i, k) => {
+      const nuevos = i.viajes.filter(v => !yaCargadas.has(v.carta)).length;
+      const ctrl = i.cuadra === null ? '<span class="alerta">sin total para comparar</span>'
+        : i.cuadra ? 'Coincide con el total del reporte' : `<span class="alerta">No coincide: el reporte dice ${num(i.totalNeto)} kg</span>`;
+      return `<tr><td class="izq">${i.nombre.replace(/</g, '&lt;')}</td>
+        <td><select data-tipo-imp="${k}" style="padding:3px 5px;border:1px solid var(--linea);font:inherit;">${Object.entries(TIPOS_DESPACHO).map(([v, t]) => `<option value="${v}"${v === i.tipo ? ' selected' : ''}>${t}</option>`).join('')}</select></td>
+        <td>${nombreCereal(i.cereal)}</td><td>${i.desde || '—'} a ${i.hasta || '—'}</td><td>${i.viajes.length}</td><td>${num(i.suma)}</td>
+        <td class="izq">${ctrl}${i.avisos.length ? '<br><span class="alerta">' + i.avisos.join(' ') + '</span>' : ''}</td>
+        <td>${nuevos}${nuevos < i.viajes.length ? ` <small>(${i.viajes.length - nuevos} ya estaban)</small>` : ''}</td>
+        <td class="solo-pantalla"><button class="mini" data-quitar-imp="${k}">Quitar</button></td></tr>`;
+    }).join('')}</tbody></table></div>`;
+  $('despGuardar').hidden = false;
+  caja.querySelectorAll('[data-tipo-imp]').forEach(s => s.onchange = () => {
+    const i = importados[+s.dataset.tipoImp]; i.tipo = s.value; i.viajes.forEach(v => { v.tipo = s.value; });
+  });
+  caja.querySelectorAll('[data-quitar-imp]').forEach(b => b.onclick = () => { importados.splice(+b.dataset.quitarImp, 1); pintarDespachos(); });
+}
+
+async function guardarImportados() {
+  const viajes = importados.flatMap(i => i.viajes);
+  if (!viajes.length) return;
+  $('despGuardar').disabled = true;
+  estadoDesp(`Guardando ${viajes.length} viajes…`);
+  const filas = viajes.map(filaDespacho);
+  for (let k = 0; k < filas.length; k += 40) {
+    const res = await postSheet('Despachos', 'upsertMany', { filas: filas.slice(k, k + 40) }, 'CartaPorte');
+    if (!subidaOk(res)) {
+      $('despGuardar').disabled = false;
+      const viejo = res && /desconocida/i.test(String(res.error));
+      estadoDesp(viejo ? 'El Apps Script no tiene la carga de varios viajes juntos: reemplazá el código por el de apps-script.gs y publicá una nueva versión.'
+        : 'No se pudo guardar en la pestaña Despachos' + (res && res.error ? ` (${res.error})` : '') + '. Revisá la conexión y que la pestaña exista.', true);
+      return;
+    }
+  }
+  const remoto = await fetchSheet();
+  if (remoto) cargarDespachos(remoto);
+  const enSheet = new Set(despachos.map(d => d.carta));
+  const faltan = viajes.filter(v => !enSheet.has(v.carta)).length;
+  $('despGuardar').disabled = false;
+  if (faltan) { estadoDesp(`${faltan} viajes no aparecen en la Sheet: revisá los encabezados de la pestaña Despachos.`, true); pintarDespachos(); return; }
+  importados = [];
+  anotar(`Se importaron ${viajes.length} viajes de despacho por balanza`);
+  estadoDesp(`Guardados ${viajes.length} viajes. Los que ya estaban se actualizaron, no se duplican.`);
+  pintarDespachos();
+}
+
+async function borrarDespacho(carta) {
+  const d = despachos.find(x => x.carta === carta);
+  if (!d || !confirm(`¿Borrar la carta de porte ${carta} (${tnDesp(d.kg)} tn)?`)) return;
+  const res = await postSheet('Despachos', 'delete', { CartaPorte: carta }, 'CartaPorte');
+  if (!subidaOk(res)) { estadoDesp('No se pudo borrar de la Sheet. Probá de nuevo.', true); return; }
+  despachos = despachos.filter(x => x.carta !== carta);
+  pintarDespachos();
+}
+
+function filtrosDespacho() {
+  return { mes: $('despMes').value, cereal: $('despCereal').value, tipo: $('despTipo').value };
+}
+function pintarFiltroProcedencias() {
+  const sel = procedenciasSecadora();
+  $('despProcedencias').innerHTML = todasProcedencias().map(p =>
+    `<label style="display:inline-flex;gap:4px;align-items:center;margin-right:12px;font-size:12.5px;"><input type="checkbox" data-proc="${p.replace(/"/g, '&quot;')}"${sel.has(p) ? ' checked' : ''}> ${p.replace(/</g, '&lt;')}</label>`
+  ).join('') || '<span class="vacio">Todavía no hay viajes importados.</span>';
+  $('despProcedencias').querySelectorAll('[data-proc]').forEach(c => c.onchange = () => {
+    lsGuardar(LS_PROC, [...$('despProcedencias').querySelectorAll('[data-proc]:checked')].map(x => x.dataset.proc));
+    pintarDespachos();
+  });
+}
+
+function pintarDespachos() {
+  pintarImportados();
+  pintarFiltroProcedencias();
+  /* meses con datos en el selector */
+  const meses = [...new Set(despachos.map(d => d.fecha.slice(0, 7)))].sort().reverse();
+  const selMes = $('despMes'), previo = selMes.value;
+  selMes.innerHTML = '<option value="">Todos los meses</option>' + meses.map(m => `<option value="${m}">${nombreMes(m)} ${m.slice(0, 4)}</option>`).join('');
+  selMes.value = meses.includes(previo) ? previo : (previo === '' && selMes.dataset.tocado ? '' : (meses[0] || ''));
+  const f = filtrosDespacho();
+  const lista = despachos.filter(d => (!f.mes || d.fecha.startsWith(f.mes)) && (!f.cereal || d.cereal === f.cereal) && (!f.tipo || d.tipo === f.tipo));
+  const propios = lista.filter(deLaSecadora), otras = lista.filter(d => !deLaSecadora(d));
+  /* resumen por cereal */
+  const res = {};
+  propios.forEach(d => {
+    const r = res[d.cereal] || (res[d.cereal] = { venta: 0, retiro: 0, viajes: 0, kgHum: 0, kgConHum: 0 });
+    r[d.tipo] += d.kg; r.viajes++;
+    if (d.humedad !== '' && isFinite(d.humedad)) { r.kgHum += d.kg * d.humedad; r.kgConHum += d.kg; }
+  });
+  const tot = Object.values(res).reduce((a, r) => ({ venta: a.venta + r.venta, retiro: a.retiro + r.retiro, viajes: a.viajes + r.viajes }), { venta: 0, retiro: 0, viajes: 0 });
+  $('despResumen').innerHTML = Object.keys(res).length ? `<div class="tabla-scroll"><table>
+    <thead><tr><th>Cereal</th><th>Venta (tn)</th><th>Retiro productor (tn)</th><th>Total (tn)</th><th>Viajes</th><th>Humedad prom. (reporte)</th></tr></thead>
+    <tbody>${Object.keys(res).sort().map(c => { const r = res[c]; return `<tr><td>${nombreCereal(c)}</td><td>${tnDesp(r.venta)}</td><td>${tnDesp(r.retiro)}</td>
+      <td><b>${tnDesp(r.venta + r.retiro)}</b></td><td>${r.viajes}</td><td>${r.kgConHum ? num(r.kgHum / r.kgConHum, 1) + ' %' : '—'}</td></tr>`; }).join('')}</tbody>
+    <tfoot><tr><td>Total</td><td>${tnDesp(tot.venta)}</td><td>${tnDesp(tot.retiro)}</td><td>${tnDesp(tot.venta + tot.retiro)}</td><td>${tot.viajes}</td><td></td></tr></tfoot>
+    </table></div>
+    ${otras.length ? `<p class="nota">Además hay ${otras.length} viajes (${tnDesp(otras.reduce((a, d) => a + d.kg, 0))} tn) de otras procedencias, que no se cuentan para el gas: ${[...new Set(otras.map(d => d.procedencia))].join(', ')}.</p>` : ''}`
+    : '<p class="vacio">No hay despachos de la planta de la secadora con estos filtros.</p>';
+  $('despTabla').innerHTML = lista.length ? `<div class="tabla-scroll"><table>
+    <thead><tr><th>Fecha</th><th>Carta de porte</th><th>Tipo</th><th>Cereal</th><th>Procedencia</th><th>Destino</th><th>Kg</th><th>Hum. %</th><th>Fletero</th><th>Patente</th><th class="solo-pantalla"></th></tr></thead>
+    <tbody>${lista.slice().reverse().map(d => `<tr${deLaSecadora(d) ? '' : ' class="vacia"'}><td>${fechaCorta(d.fecha)}</td><td>${d.carta}</td><td>${TIPOS_DESPACHO[d.tipo]}</td><td>${nombreCereal(d.cereal)}</td>
+      <td class="izq">${d.procedencia.replace(/</g, '&lt;')}</td><td class="izq">${d.destino.replace(/</g, '&lt;')}</td><td>${num(d.kg)}</td><td>${d.humedad === '' ? '—' : num(d.humedad, 1)}</td>
+      <td class="izq">${d.fletero.replace(/</g, '&lt;')}</td><td>${d.patente.replace(/</g, '&lt;')}</td>
+      <td class="solo-pantalla"><button class="mini" data-borrar-desp="${d.carta}">Borrar</button></td></tr>`).join('')}</tbody></table></div>`
+    : '<p class="vacio">Sin viajes con estos filtros.</p>';
+  $('despTabla').querySelectorAll('[data-borrar-desp]').forEach(b => b.onclick = () => borrarDespacho(b.dataset.borrarDesp));
+}
+
+async function abrirDespachos() {
+  document.getElementById('modalDespachos').classList.add('abierto');
+  estadoDesp('');
+  $('despResumen').innerHTML = '<p class="vacio">Cargando…</p>';
+  const remoto = await fetchSheet();
+  if (remoto) cargarDespachos(remoto);
+  pintarDespachos();
+}
+
+$('despArchivo').addEventListener('change', e => { if (e.target.files.length) importarArchivos([...e.target.files]); });
+['despCereal', 'despTipo'].forEach(id => $(id).addEventListener('change', pintarDespachos));
+$('despMes').addEventListener('change', () => { $('despMes').dataset.tocado = '1'; pintarDespachos(); });
+$('despGuardar').onclick = guardarImportados;
+$('opDespachos').onclick = abrirDespachos;
+$('opDespachos2').onclick = abrirDespachos;
+$('despCerrar').onclick = () => document.getElementById('modalDespachos').classList.remove('abierto');
+$('despImprimir').onclick = () => window.print();
+
 /* jornada guionada */
 const GUION = [
   { t: 300,  f: () => { reloj = 7 * 60 + 30; anotar('Arranca la jornada'); pintarTodo(); } },
@@ -3845,6 +4175,7 @@ function animar() {
   cargarLecturasGas(cubicajeRemoto);
   cargarFacturasGas(cubicajeRemoto);
   cargarSalidasRecorridas(cubicajeRemoto);
+  cargarDespachos(cubicajeRemoto);
   aplicarDatosSilosRemoto();
   cargarPlanta('monaco');
   pintarPaso();
