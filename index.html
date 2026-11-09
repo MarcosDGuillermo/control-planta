@@ -189,6 +189,19 @@
     thead { display: table-header-group; }
   }
 
+  /* ---------- informe del mes: visor a pantalla completa ---------- */
+  .visor-informe { position: fixed; inset: 0; z-index: 60; background: #F4F5F4; display: none; flex-direction: column; }
+  .visor-informe.abierto { display: flex; }
+  .visor-informe .barra { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 16px; background: #fff; border-bottom: 1px solid var(--linea); }
+  .visor-informe .barra b { font-size: 15px; font-weight: 600; margin-right: 6px; }
+  .visor-informe .barra select { padding: 6px 8px; border: 1px solid var(--linea); font: inherit; font-size: 13px; background: #fff; color: var(--ink); }
+  .visor-informe .barra button { padding: 7px 14px; font-size: 13px; border: 1px solid var(--ink); background: #fff; color: var(--ink); }
+  .visor-informe .barra button.fuerte { background: var(--ink); color: #fff; }
+  .visor-informe .barra .estado { font-size: 12px; color: var(--tenue); }
+  .visor-informe .barra .der { margin-left: auto; display: flex; gap: 8px; }
+  .visor-informe iframe { flex: 1; width: 100%; border: 0; background: #F4F5F4; }
+  @media print { .visor-informe { display: none !important; } }
+
   .ayuda { position: fixed; left: 16px; bottom: 16px; font-size: 11px; color: var(--tenue); max-width: 180px; }
 
   @media (max-width: 900px) {
@@ -329,6 +342,7 @@
   <div class="grupo" id="grupoCierre">
     <div class="rot">Cierre de mes</div>
     <div class="botones">
+      <button id="opInforme" class="fuerte">Informe del mes</button>
       <button id="opDespachos">Despachos por balanza</button>
       <button id="opRecorridaCierre">Recorrida de silos</button>
     </div>
@@ -640,6 +654,429 @@
 </div>
 
 <p class="ayuda">Arrastrá para girar la planta. Tocá un silo, un tubo o una bolsa para ver su carga.</p>
+
+<div class="visor-informe" id="visorInforme" role="dialog" aria-label="Informe del mes">
+  <div class="barra">
+    <b>Informe del mes</b>
+    <select id="infMes" aria-label="Mes del informe"></select>
+    <span class="estado" id="infEstado"></span>
+    <div class="der">
+      <button id="infImprimir" class="fuerte">Imprimir / PDF</button>
+      <button id="infAparte">Abrir aparte</button>
+      <button id="infCerrar">Cerrar</button>
+    </div>
+  </div>
+  <iframe id="infMarco" title="Informe del mes"></iframe>
+</div>
+
+<!-- plantilla del informe del mes: estilos, cuerpo y código. La app la completa con los datos del mes. -->
+<script type="text/plain" id="tplInformeCss">
+  :root {
+    --ink: #1E2628; --steel: #4A585C; --tenue: #6E7B7E; --linea: #B9C1C0; --suave: #E4E8E7;
+    --fondo: #F4F5F4; --hoja: #FFFFFF; --alerta: #A8642B; --bien: #2E6B4F;
+    --maiz: #eb6834; --soja: #2a78d6;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--fondo); color: var(--ink);
+    font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.5; }
+  .hoja { max-width: 860px; margin: 24px auto; background: var(--hoja); padding: 40px 48px 36px; border: 1px solid var(--suave); }
+  header { display: flex; align-items: center; gap: 18px; border-bottom: 2px solid var(--ink); padding-bottom: 16px; }
+  header img { width: 64px; height: 64px; flex-shrink: 0; }
+  header .t { flex: 1; min-width: 0; }
+  header h1 { margin: 0; font-size: 23px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.2; }
+  header p { margin: 2px 0 0; color: var(--tenue); font-size: 13px; }
+  header .meta { text-align: right; font-size: 12px; color: var(--tenue); line-height: 1.45; }
+  h2 { font-size: 15.5px; font-weight: 650; letter-spacing: -0.01em; margin: 30px 0 4px; }
+  h2 + .bajada { margin: 0 0 12px; color: var(--tenue); font-size: 12.5px; }
+  .resumen { margin: 20px 0 0; font-size: 15px; line-height: 1.55; }
+  .resumen b { font-weight: 650; }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 20px 0 0; }
+  .kpi { border: 1px solid var(--suave); border-top: 3px solid var(--ink); padding: 10px 12px 11px; }
+  .kpi .rot { font-size: 11.5px; color: var(--tenue); line-height: 1.3; }
+  .kpi .cifra { font-size: 24px; font-weight: 650; letter-spacing: -0.02em; margin-top: 3px; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .kpi .cifra small { font-size: 13px; font-weight: 500; color: var(--steel); margin-left: 3px; }
+  .kpi .nota { font-size: 11.5px; color: var(--steel); margin-top: 3px; }
+  .kpi.destacado { border-top-color: var(--bien); background: #F3F8F5; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  th { text-align: right; font-weight: 600; color: var(--steel); font-size: 11.5px; padding: 6px 8px; border-bottom: 1px solid var(--ink); vertical-align: bottom; line-height: 1.3; }
+  td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--suave); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; padding-left: 0; }
+  th.izq, td.izq { text-align: left; }
+  tfoot td { font-weight: 650; border-top: 1px solid var(--ink); border-bottom: 0; }
+  .punto { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+  .grafico { position: relative; margin: 6px 0 4px; }
+  .grafico svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .leyenda { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--steel); margin: 2px 0 6px; }
+  .leyenda span { display: inline-flex; align-items: center; }
+  .tip { position: absolute; pointer-events: none; background: var(--ink); color: #fff; font-size: 12px; line-height: 1.4;
+    padding: 6px 9px; border-radius: 3px; white-space: nowrap; opacity: 0; transition: opacity .12s; z-index: 5; }
+  .tip b { font-weight: 650; }
+  .gasctl td:first-child { white-space: normal; }
+  .dos { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start; }
+  .mirar { margin: 8px 0 0; padding: 0; list-style: none; counter-reset: m; }
+  .mirar li { position: relative; padding: 10px 0 10px 34px; border-bottom: 1px solid var(--suave); }
+  .mirar li:last-child { border-bottom: 0; }
+  .mirar li::before { counter-increment: m; content: counter(m); position: absolute; left: 0; top: 10px; width: 22px; height: 22px;
+    border: 1px solid var(--ink); border-radius: 50%; font-size: 12px; font-weight: 650; display: flex; align-items: center; justify-content: center; }
+  .mirar b { font-weight: 650; }
+  .ejemplo { margin: 12px 0 0; padding: 12px 14px; background: var(--fondo); border-left: 3px solid var(--bien); font-size: 13.5px; }
+  .ejemplo .cuenta { font-variant-numeric: tabular-nums; font-weight: 650; }
+  .notas { font-size: 12px; color: var(--steel); line-height: 1.55; }
+  .notas p { margin: 0 0 6px; }
+  .tag { display: inline-block; font-size: 10.5px; padding: 0 5px; border: 1px solid var(--linea); border-radius: 2px; color: var(--steel); white-space: nowrap; }
+  .tag.primera { border-style: dashed; }
+  footer { margin-top: 26px; padding-top: 10px; border-top: 1px solid var(--suave); font-size: 11px; color: var(--tenue); display: flex; justify-content: space-between; gap: 12px; }
+  .salto { break-before: page; }
+  .imprimir { position: fixed; right: 16px; bottom: 16px; padding: 9px 16px; font: inherit; font-size: 13px; background: var(--ink); color: #fff; border: 0; cursor: pointer; }
+
+  @media (max-width: 720px) {
+    .hoja { margin: 0; padding: 22px 16px 24px; border: 0; }
+    header { flex-wrap: wrap; }
+    header .meta { text-align: left; width: 100%; }
+    .kpis { grid-template-columns: 1fr 1fr; }
+    .dos { grid-template-columns: 1fr; gap: 8px; }
+    .ancho { overflow-x: auto; }
+    .ancho table { min-width: 620px; }
+  }
+  @media print {
+    @page { size: A4; margin: 13mm 12mm; }
+    body { background: #fff; font-size: 12.5px; }
+    .hoja { margin: 0; padding: 0; border: 0; max-width: none; }
+    .imprimir, .tip { display: none !important; }
+    h2 { break-after: avoid; }
+    .grafico, table, .kpis, .mirar li, .ejemplo { break-inside: avoid; }
+    h2 + .bajada, .leyenda { break-after: avoid; }
+    .dos, .notas, footer { break-inside: avoid; }
+    footer { break-before: avoid; margin-top: 14px; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</script>
+<script type="text/plain" id="tplInformeHtml"><div class="hoja">
+
+<header>
+  <img id="logo" alt="Cereales Lobería">
+  <div class="t">
+    <h1 id="titulo"></h1>
+    <p>Planta Mónaco · Cereales Lobería S.A.</p>
+  </div>
+  <div class="meta" id="meta"></div>
+</header>
+
+<p class="resumen" id="resumen"></p>
+
+<div class="kpis" id="kpis"></div>
+
+<h2>Costo de gas por tonelada y punto</h2>
+<p class="bajada">Costo del gas ÷ (toneladas pasadas por la secadora × 2,5 puntos por pasada).</p>
+<div class="dos">
+  <div><div class="grafico" id="gCosto"></div></div>
+  <div class="ancho"><table id="tCereal"></table></div>
+</div>
+<div class="ejemplo" id="ejemplo"></div>
+
+<h2>Actividad de la secadora</h2>
+<p class="bajada">Toneladas de cada pasada, por fecha. Con rayado, la Primera de dos: el grano necesita un repaso para quedar listo.</p>
+<div class="leyenda" id="lActividad"></div>
+<div class="grafico" id="gActividad"></div>
+
+<h2>Control del gas con los remitos de YPF</h2>
+<p class="bajada">Lo que había en los tubos, más lo que entró por remito, menos lo que marcan los relojes, tiene que dar lo que quedó al cierre del mes.</p>
+<div class="dos">
+  <div class="ancho"><table id="tGasCtl" class="gasctl"></table></div>
+  <p class="notas" id="nGasCtl" style="margin:0"></p>
+</div>
+
+<h2>Gas en los tubos durante el mes</h2>
+<p class="bajada">Propano en los tres tubos según cada lectura de los relojes. Los saltos para arriba son las cargas de YPF.</p>
+<div class="grafico" id="gTubos"></div>
+
+<div id="bMirar">
+<h2>Para mirar</h2>
+<ol class="mirar" id="mirar"></ol>
+</div>
+
+<h2 class="salto">Detalle de pasadas</h2>
+<p class="bajada">El gas de cada pasada sale de los relojes de los tubos: lo que bajó entre dos lecturas se reparte entre las pasadas de ese tramo según sus toneladas. Por eso una pasada suelta puede salir más cara o más barata que otra; el número confiable es el total del mes.</p>
+<div class="ancho"><table id="tPasadas"></table></div>
+
+<h2>Cómo se calcula</h2>
+<div class="notas" id="notas"></div>
+
+<footer><span>Control de planta · Cereales Lobería S.A.</span><span>Datos: pasadas, lecturas de gas, remitos y facturas cargados en la app.</span></footer>
+</div>
+</script>
+<script type="text/plain" id="tplInformeJs">/* Informe del mes: este código corre dentro del informe y dibuja todo a partir de window.D, que arma la app */
+(function () {
+const D = window.D;
+const PUNTOS = D.puntos;
+const PALETA = { 'Maíz': '#eb6834', 'Soja': '#2a78d6', 'Trigo': '#1baf7a', 'Girasol': '#6250d6', 'Cebada forrajera': '#e87ba4', 'Cebada cervecera': '#008300' };
+const OTROS = ['#1baf7a', '#6250d6', '#e87ba4', '#008300'];
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+/* ===== utilidades ===== */
+const num = (n, d = 0) => (Number(n) || 0).toLocaleString('es-AR', { minimumFractionDigits: d, maximumFractionDigits: d });
+const us = (n, d = 2) => 'US$ ' + num(n, d);
+const fecha = f => f.slice(8, 10) + '/' + f.slice(5, 7);
+const $ = id => document.getElementById(id);
+const sum = (a, k) => a.reduce((s, x) => s + (x[k] || 0), 0);
+const NS = 'http://www.w3.org/2000/svg';
+const el = (tag, at, padre) => { const e = document.createElementNS(NS, tag); for (const k in at) e.setAttribute(k, at[k]); if (padre) padre.appendChild(e); return e; };
+const txt = (s, at, padre) => { const e = el('text', at, padre); e.textContent = s; return e; };
+const punto = c => `<span class="punto" style="background:${c}"></span>`;
+const listaY = a => a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' y ' + a[a.length - 1];
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function tooltip(cont) {
+  const t = document.createElement('div'); t.className = 'tip'; cont.appendChild(t);
+  return {
+    show(html, ev) { t.innerHTML = html; t.style.opacity = 1; this.move(ev); },
+    move(ev) { const r = cont.getBoundingClientRect(); let x = ev.clientX - r.left + 12, y = ev.clientY - r.top - 10;
+      if (x + t.offsetWidth > r.width) x = ev.clientX - r.left - t.offsetWidth - 12; t.style.left = x + 'px'; t.style.top = Math.max(0, y - t.offsetHeight) + 'px'; },
+    hide() { t.style.opacity = 0; }
+  };
+}
+function barraV(x, y, w, h, r = 4) { r = Math.min(r, h, w / 2); return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`; }
+function barraH(x, y, w, h, r = 4) { r = Math.min(r, w, h / 2); return `M${x},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h - r}Q${x + w},${y + h} ${x + w - r},${y + h}H${x}Z`; }
+const pasoEje = max => { const b = [50, 100, 200, 250, 500, 1000, 2000, 2500, 5000]; return b.find(p => max / p <= 5) || 10000; };
+
+/* ===== cabecera ===== */
+const [anio, mesN] = D.mes.split('-').map(Number), nomMes = MESES[mesN - 1], Mes = nomMes[0].toUpperCase() + nomMes.slice(1);
+const dias = new Date(anio, mesN, 0).getDate(), mm = String(mesN).padStart(2, '0');
+document.title = `Informe de secado — ${Mes} ${anio}`;
+$('logo').src = D.logo;
+$('titulo').textContent = `Informe de secado — ${Mes} ${anio}`;
+$('meta').innerHTML = D.enCurso ? `Mes en curso: datos hasta el ${D.emitido.slice(0, 5)}<br>Emitido: ${D.emitido}` : `Período: 1 al ${dias}/${mm}/${anio}<br>Emitido: ${D.emitido}`;
+
+/* ===== cálculos ===== */
+const P = D.pasadas;
+const ORDEN = Object.keys(PALETA);
+const cereales = [...new Set(P.map(p => p.c))].sort((a, b) => ((ORDEN.indexOf(a) + 1) || 99) - ((ORDEN.indexOf(b) + 1) || 99));
+const COLOR = {}; let iOtro = 0;
+cereales.forEach(c => { COLOR[c] = PALETA[c] || OTROS[iOtro++ % OTROS.length]; });
+const tnPts = P.reduce((s, p) => s + p.tn, 0) * PUNTOS;
+const M = Object.fromEntries(cereales.map(c => {
+  const p = P.filter(x => x.c === c), tn = sum(p, 'tn'), kg = sum(p, 'kg'), costo = sum(p, 'us');
+  return [c, { c, n: p.length, tn, kg, costo, kgTp: tn ? kg / (tn * PUNTOS) : 0, usTp: tn ? costo / (tn * PUNTOS) : 0 }];
+}));
+const sinP = D.sinPasada;   /* gas que bajó en tramos sin ninguna pasada */
+const T = { n: P.length, tn: sum(P, 'tn'), kg: D.totalKg, costo: D.totalUs };
+T.kgTp = tnPts ? T.kg / tnPts : 0; T.usTp = tnPts ? T.costo / tnPts : 0;
+const hayCosto = T.costo > 0;
+
+/* ===== sin datos ===== */
+if (!P.length && !(T.kg > 0)) {
+  document.querySelector('.hoja').innerHTML = document.querySelector('header').outerHTML +
+    `<p class="resumen">No hay pasadas ni lecturas de gas cargadas en ${nomMes} de ${anio}.</p>`;
+  return;
+}
+
+/* ===== resumen e indicadores ===== */
+$('resumen').innerHTML =
+  `En ${nomMes} la secadora hizo <b>${T.n} ${T.n === 1 ? 'pasada' : 'pasadas'}</b> por <b>${num(T.tn)} toneladas</b> y consumió <b>${num(T.kg)} kg de gas</b>` +
+  (hayCosto ? ` (${us(T.costo, 0)}). ` : '. ') +
+  (hayCosto && tnPts ? `Tomando 2,5 puntos por pasada, el gas costó <b>${us(T.usTp)} por tonelada y punto</b>` +
+    (cereales.length > 1 ? `: ${listaY(cereales.map(c => `${us(M[c].usTp)} en ${c.toLowerCase()}`))}.` : '.') : '') +
+  (!hayCosto ? ' Falta cargar la factura de YPF para valorizar el gas.' : '');
+const kpi = (rot, cifra, unidad, nota, cls = '') => `<div class="kpi ${cls}"><div class="rot">${rot}</div><div class="cifra">${cifra}<small>${unidad}</small></div>${nota ? `<div class="nota">${nota}</div>` : ''}</div>`;
+$('kpis').innerHTML =
+  kpi('Pasadas por la secadora', num(T.tn), 'tn', `${T.n} ${T.n === 1 ? 'pasada' : 'pasadas'}`) +
+  kpi('Gas consumido', num(T.kg), 'kg', tnPts ? `${num(T.kgTp, 2)} kg por tn·punto` : '') +
+  kpi('Costo del gas', hayCosto ? num(T.costo) : '—', hayCosto ? 'US$' : '', hayCosto ? 'a precio de factura' : 'falta factura') +
+  kpi('Costo por tn·punto', hayCosto && tnPts ? num(T.usTp, 2) : '—', hayCosto && tnPts ? 'US$' : '', cereales.length > 1 && hayCosto ? cereales.map(c => `${c.toLowerCase()} ${num(M[c].usTp, 2)}`).join(' · ') : '', 'destacado');
+
+/* ===== gráfico: costo por tn·punto ===== */
+(function () {
+  const cont = $('gCosto');
+  if (!hayCosto || !tnPts) { cont.innerHTML = '<p class="notas">Sin costo: falta la factura o el tipo de cambio de alguna carga.</p>'; return; }
+  const filas = [...cereales.map(c => ({ et: c, v: M[c].usTp, color: COLOR[c] })), ...(cereales.length > 1 ? [{ et: 'Total', v: T.usTp, color: '#4A585C' }] : [])];
+  const W = 380, izq = 44, der = 14, alto = 30, gap = 16, top = 8, H = top + filas.length * (alto + gap) + 10;
+  const vmax = Math.max(...filas.map(f => f.v)), max = Math.max(0.5, Math.ceil(vmax * 1.08 / 0.5) * 0.5), x = v => izq + (W - izq - der) * v / max;
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Costo de gas por tonelada y punto por cereal' }, cont);
+  for (let v = 0; v <= max + 1e-9; v += 0.5) {
+    el('line', { x1: x(v), x2: x(v), y1: top - 4, y2: H - 10, stroke: '#E4E8E7', 'stroke-width': 1 }, svg);
+    txt(num(v, 1), { x: x(v), y: H, 'text-anchor': 'middle', 'font-size': 10.5, fill: '#6E7B7E' }, svg);
+  }
+  const tip = tooltip(cont);
+  filas.forEach((f, i) => {
+    const y = top + i * (alto + gap), w = Math.max(2, x(f.v) - x(0));
+    txt(f.et, { x: 0, y: y + alto / 2 + 4, 'font-size': 12, fill: '#1E2628', 'font-weight': f.et === 'Total' ? 650 : 500 }, svg);
+    el('path', { d: barraH(x(0), y, w, alto), fill: f.color }, svg);
+    if (w > 70) txt(us(f.v), { x: x(f.v) - 8, y: y + alto / 2 + 4, 'text-anchor': 'end', 'font-size': 12, 'font-weight': 650, fill: '#fff' }, svg);
+    else txt(us(f.v), { x: x(f.v) + 6, y: y + alto / 2 + 4, 'font-size': 12, 'font-weight': 650, fill: '#1E2628' }, svg);
+    const hit = el('rect', { x: 0, y: y - gap / 2, width: W, height: alto + gap, fill: 'transparent' }, svg);
+    hit.addEventListener('mousemove', ev => tip.show(`<b>${esc(f.et)}</b><br>Gas: ${us(f.v)} por tn·punto<br>Una pasada (2,5 puntos): ${us(f.v * PUNTOS)} por tn`, ev));
+    hit.addEventListener('mouseleave', () => tip.hide());
+  });
+})();
+
+/* ===== tabla por cereal ===== */
+$('tCereal').innerHTML = `<thead><tr><th>Cereal</th><th>Tn pasadas</th><th>Gas (kg)</th><th>Costo gas (US$)</th><th>Kg / tn·pto</th><th>US$ / tn·pto</th></tr></thead><tbody>` +
+  cereales.map(c => { const r = M[c]; return `<tr><td>${punto(COLOR[c])}${esc(c)}</td><td>${num(r.tn)}</td><td>${num(r.kg)}</td><td>${hayCosto ? num(r.costo) : '—'}</td><td>${num(r.kgTp, 2)}</td><td>${hayCosto ? num(r.usTp, 2) : '—'}</td></tr>`; }).join('') +
+  (sinP.kg > 1 ? `<tr><td>Sin pasada registrada</td><td>—</td><td>${num(sinP.kg)}</td><td>${hayCosto ? num(sinP.us) : '—'}</td><td>—</td><td>—</td></tr>` : '') +
+  `</tbody><tfoot><tr><td>Total</td><td>${num(T.tn)}</td><td>${num(T.kg)}</td><td>${hayCosto ? num(T.costo) : '—'}</td><td>${num(T.kgTp, 2)}</td><td>${hayCosto ? num(T.usTp, 2) : '—'}</td></tr></tfoot>`;
+
+/* ===== gas por tonelada según las pasadas ===== */
+(function () {
+  if (!hayCosto || !cereales.length) { $('ejemplo').remove(); return; }
+  const una = listaY(cereales.map(c => `<span class="cuenta">${us(PUNTOS * M[c].usTp)}</span> en ${c.toLowerCase()}`));
+  const dos = listaY(cereales.map(c => `<span class="cuenta">${us(2 * PUNTOS * M[c].usTp)}</span> en ${c.toLowerCase()}`));
+  const c0 = cereales[0];
+  $('ejemplo').innerHTML = `<b>Gas por tonelada de grano:</b> con una pasada (2,5 puntos) ${una}; con dos pasadas (5 puntos) ${dos}. ` +
+    `Ejemplo: 100 tn de ${c0.toLowerCase()} con dos pasadas gastan 100 × 5 × ${us(M[c0].usTp)} = ${us(100 * 2 * PUNTOS * M[c0].usTp, 0)} de gas.`;
+})();
+
+/* ===== gráfico: actividad ===== */
+(function () {
+  const cont = $('gActividad');
+  $('lActividad').innerHTML = cereales.map(c => `<span>${punto(COLOR[c])}${esc(c)}</span>`).join('') +
+    (P.some(p => p.t === 'Primera de dos') ? `<span><svg width="16" height="11" style="margin-right:6px"><rect width="16" height="11" rx="2" fill="url(#rayaL)"/></svg>Primera de dos (falta repaso)</span>` : '');
+  const W = 760, H = 250, izq = 40, der = 6, top = 14, base = H - 26;
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Toneladas por pasada a lo largo de ${nomMes}` }, cont);
+  const defs = el('defs', {}, svg);
+  const raya = (id, col) => { const p = el('pattern', { id, width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
+    el('rect', { width: 6, height: 6, fill: col, 'fill-opacity': 0.28 }, p); el('line', { x1: 0, y1: 0, x2: 0, y2: 6, stroke: col, 'stroke-width': 3 }, p); };
+  cereales.forEach((c, i) => raya('raya' + i, COLOR[c])); raya('rayaL', '#4A585C');
+  const tmax = Math.max(100, ...P.map(p => p.tn)), paso = pasoEje(tmax * 1.1), max = Math.ceil(tmax * 1.12 / paso) * paso + paso * 0.25, y = v => base - (base - top) * v / max;
+  const ancho = (W - izq - der) / dias, xDia = d => izq + (d - 1) * ancho;
+  for (let v = 0; v < max; v += paso) {
+    el('line', { x1: izq, x2: W - der, y1: y(v), y2: y(v), stroke: v ? '#E4E8E7' : '#1E2628', 'stroke-width': 1 }, svg);
+    txt(num(v), { x: izq - 6, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 10.5, fill: '#6E7B7E' }, svg);
+  }
+  txt('tn', { x: izq - 6, y: top - 2, 'text-anchor': 'end', 'font-size': 10.5, fill: '#6E7B7E' }, svg);
+  [1, 5, 10, 15, 20, 25, dias].forEach(d => txt(String(d).padStart(2, '0') + '/' + mm, { x: xDia(d) + ancho / 2, y: H - 8, 'text-anchor': 'middle', 'font-size': 10.5, fill: '#6E7B7E' }, svg));
+  const tip = tooltip(cont);
+  const porDia = {};
+  P.forEach(p => { const d = +p.f.slice(8, 10); (porDia[d] = porDia[d] || []).push(p); });
+  Object.keys(porDia).forEach(dk => {
+    const d = +dk, lista = porDia[d], bw = (ancho - 4) / lista.length;
+    lista.forEach((p, k) => {
+      const x = xDia(d) + 2 + k * bw, h = base - y(p.tn), prim = p.t === 'Primera de dos', ic = cereales.indexOf(p.c);
+      el('path', { d: barraV(x + (lista.length > 1 ? 0.5 : 0), y(p.tn), bw - (lista.length > 1 ? 1 : 0), h), fill: prim ? `url(#raya${ic})` : COLOR[p.c], stroke: prim ? COLOR[p.c] : 'none', 'stroke-width': prim ? 1.5 : 0 }, svg);
+      if (p.tn >= tmax * 0.75 && lista.length === 1) txt(num(p.tn), { x: x + bw / 2, y: y(p.tn) - 5, 'text-anchor': 'middle', 'font-size': 10, fill: '#4A585C' }, svg);
+    });
+    const hit = el('rect', { x: xDia(d), y: top, width: ancho, height: base - top, fill: 'transparent' }, svg);
+    hit.addEventListener('mousemove', ev => tip.show(lista.map(p => `<b>${fecha(p.f)} · ${esc(p.c)}</b> · ${p.t}<br>${num(p.ch, 1)} chapas · ${num(p.tn, 1)} tn<br>Gas ${num(p.kg)} kg${hayCosto ? ' · ' + us(p.us, 0) : ''}`).join('<br>'), ev));
+    hit.addEventListener('mouseleave', () => tip.hide());
+  });
+})();
+
+/* ===== control del gas con los remitos ===== */
+const G = D.gas;
+const entro = G.remitos.reduce((a, r) => a + r.kg, 0);
+const queda = G.inicio ? G.inicio.kg + entro - T.kg : null;
+const dif = G.final && queda !== null ? G.final.kg - queda : null;
+const tolCtl = Math.max(100, T.kg * 0.01);   /* 1 % del consumo, o 3 puntos de reloj */
+const coincide = dif !== null && Math.abs(dif) <= tolCtl;
+(function () {
+  if (!G.inicio) { $('tGasCtl').innerHTML = ''; $('nGasCtl').innerHTML = 'Falta una lectura de los relojes anterior al mes para hacer el control.'; return; }
+  $('tGasCtl').innerHTML = `<tbody>` +
+    `<tr><td>En los tubos al empezar (${G.inicio.f})</td><td>${num(G.inicio.kg)} kg</td></tr>` +
+    G.remitos.map(r => `<tr><td>+ Remito del ${r.f}</td><td>${num(r.kg)} kg</td></tr>`).join('') +
+    `<tr><td>− Consumo según los relojes</td><td>${num(T.kg)} kg</td></tr>` +
+    (G.remitos.length ? `<tr style="font-weight:650"><td>= Tendría que quedar</td><td>${num(queda)} kg</td></tr>` : '') +
+    (G.final ? `<tr><td>Última lectura del mes (${G.final.f})</td><td>${num(G.final.kg)} kg</td></tr>` : '') +
+    `</tbody>` + (dif !== null && G.remitos.length ? `<tfoot><tr><td>Diferencia</td><td>${num(dif)} kg</td></tr></tfoot>` : '');
+  $('nGasCtl').innerHTML = dif === null ? 'Falta la lectura de fin de mes para cerrar el control.'
+    : !G.remitos.length ? `En el mes no hubo cargas de YPF: el consumo sale solo de las lecturas de los relojes y no hay remito contra el cual controlarlo.`
+    : coincide ? `<b>Coincide.</b> La diferencia de ${num(Math.abs(dif))} kg es el ${num(Math.abs(dif) / (T.kg || 1) * 100, 1)} % del consumo del mes, dentro del error de lectura de los relojes (1 punto de reloj = ${num(D.kgPorPunto, 1)} kg). Los ${num(T.kg)} kg de gas del mes quedan confirmados por los remitos de YPF.`
+    : `<b>No coincide.</b> Hay ${num(Math.abs(dif))} kg de diferencia (${num(Math.abs(dif) / (T.kg || 1) * 100, 1)} % del consumo). Puede haber una lectura mal tomada, una carga sin anotar o un remito con otros kg: conviene revisar las lecturas del mes antes de usar este costo.`;
+})();
+
+/* ===== gráfico: gas en los tubos ===== */
+(function () {
+  const cont = $('gTubos'), L = D.lecturas.map(l => ({ ...l, d: new Date(l.t.replace(' ', 'T')) }));
+  if (L.length < 2) { cont.innerHTML = '<p class="notas">Hacen falta al menos dos lecturas para dibujar el gráfico.</p>'; return; }
+  const W = 760, H = 240, izq = 48, der = 10, top = 14, base = H - 26;
+  const t0 = Math.min(new Date(anio, mesN - 1, 1).getTime(), L[0].d.getTime()), t1 = new Date(anio, mesN, 1).getTime();
+  const x = t => izq + (W - izq - der) * (t - t0) / (t1 - t0);
+  const kmax = Math.max(G.tubosKg, ...L.map(l => l.kg)), paso = pasoEje(kmax), ymax = Math.ceil(kmax * 1.06 / paso) * paso, y = v => base - (base - top) * v / ymax;
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Kilos de propano en los tubos durante ${nomMes}` }, cont);
+  for (let v = 0; v < ymax; v += paso) {
+    el('line', { x1: izq, x2: W - der, y1: y(v), y2: y(v), stroke: v ? '#E4E8E7' : '#1E2628', 'stroke-width': 1 }, svg);
+    txt(num(v), { x: izq - 6, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 10.5, fill: '#6E7B7E' }, svg);
+  }
+  txt('kg', { x: izq - 6, y: top - 3, 'text-anchor': 'end', 'font-size': 10.5, fill: '#6E7B7E' }, svg);
+  el('line', { x1: izq, x2: W - der, y1: y(G.tubosKg), y2: y(G.tubosKg), stroke: '#6E7B7E', 'stroke-width': 1, 'stroke-dasharray': '4 4' }, svg);
+  txt(`tubos llenos ${num(G.tubosKg)} kg`, { x: W - der, y: y(G.tubosKg) - 5, 'text-anchor': 'end', 'font-size': 10.5, fill: '#6E7B7E' }, svg);
+  [1, 5, 10, 15, 20, 25, dias].forEach(d => txt(String(d).padStart(2, '0') + '/' + mm, { x: x(new Date(anio, mesN - 1, d, 12).getTime()), y: H - 8, 'text-anchor': 'middle', 'font-size': 10.5, fill: '#6E7B7E' }, svg));
+  const pts = L.map(l => [x(l.d.getTime()), y(l.kg)]);
+  el('path', { d: `M${pts[0][0]},${base}` + pts.map(p => `L${p[0]},${p[1]}`).join('') + `L${pts[pts.length - 1][0]},${base}Z`, fill: '#4A585C', 'fill-opacity': 0.08 }, svg);
+  el('polyline', { points: pts.map(p => p.join(',')).join(' '), fill: 'none', stroke: '#4A585C', 'stroke-width': 2, 'stroke-linejoin': 'round' }, svg);
+  L.forEach((l, i) => { if (l.m === 'despues' && l.remito > 0 && i > 0)
+    txt(`carga ${num(l.remito)} kg`, { x: pts[i][0] + (pts[i][0] > W - 120 ? -6 : 6), y: pts[i][1] - 6, 'text-anchor': pts[i][0] > W - 120 ? 'end' : 'start', 'font-size': 10.5, 'font-weight': 600, fill: '#1E2628' }, svg); });
+  L.forEach((l, i) => { if (l.m === 'antes' && i > 0) {
+    el('circle', { cx: pts[i][0], cy: pts[i][1], r: 5, fill: '#A8642B', stroke: '#fff', 'stroke-width': 2 }, svg);
+    const izqT = pts[i][0] > izq + 170;
+    txt(`${num(l.kg)} kg · un tubo al ${num(Math.min(...l.pct))} %`, { x: pts[i][0] + (izqT ? -8 : 8), y: Math.min(base - 4, pts[i][1] + 16), 'text-anchor': izqT ? 'end' : 'start', 'font-size': 10.5, 'font-weight': 600, fill: '#A8642B' }, svg); } });
+  const tip = tooltip(cont), TIPO = { antes: 'Antes de la carga', despues: 'Después de la carga', lectura: 'Lectura común' };
+  L.forEach((l, i) => {
+    el('circle', { cx: pts[i][0], cy: pts[i][1], r: 3, fill: '#4A585C' }, svg);
+    const hit = el('circle', { cx: pts[i][0], cy: pts[i][1], r: 10, fill: 'transparent' }, svg);
+    hit.addEventListener('mousemove', ev => tip.show(`<b>${l.t.slice(8, 10)}/${l.t.slice(5, 7)} ${l.t.slice(11, 16)}</b> · ${TIPO[l.m]}<br>${num(l.kg)} kg · tubos ${l.pct.map(v => num(v)).join(' / ')} %`, ev));
+    hit.addEventListener('mouseleave', () => tip.hide());
+  });
+})();
+
+/* ===== para mirar ===== */
+(function () {
+  const items = [];
+  /* tubos casi vacíos */
+  const bajos = []; let enBajo = false;
+  D.lecturas.filter(l => l.t.slice(0, 7) === D.mes).forEach(l => {
+    const bajo = Math.min(...l.pct) <= 10 || l.kg < 1500;
+    if (bajo && !enBajo) bajos.push(l); else if (bajo && bajos.length && l.kg < bajos[bajos.length - 1].kg) bajos[bajos.length - 1] = l;
+    enBajo = bajo;
+  });
+  if (bajos.length) {
+    const diasSecado = new Set(P.map(p => p.f)).size, porDia = diasSecado ? T.kg / diasSecado : 0;
+    items.push(`<b>${bajos.length === 1 ? 'Una vez' : bajos.length === 2 ? 'Dos veces' : bajos.length + ' veces'} los tubos quedaron casi vacíos.</b> ` +
+      listaY(bajos.map((l, i) => `${i ? 'el' : 'El'} ${l.t.slice(8, 10)}/${l.t.slice(5, 7)} quedaban ${num(l.kg)} kg (un tubo al ${num(Math.min(...l.pct))} %)`)) + '. ' +
+      (porDia ? `Con la secadora gastando unos ${num(Math.round(porDia / 50) * 50)} kg por día de secado, conviene pedir la carga cuando el total baje de unos 3.000 kg (cerca del 30 % promedio), para no arriesgar parar la secadora.` : ''));
+  }
+  /* control de gas */
+  if (dif !== null && !coincide) items.push(`<b>El gas no cierra con los remitos</b> por ${num(Math.abs(dif))} kg. Revisar las lecturas y los remitos del mes.`);
+  if (dif === null && G.inicio) items.push(`<b>Falta la lectura de fin de mes</b> para cerrar el control con los remitos de YPF.`);
+  if (D.provisorio) items.push(`<b>Costo provisorio:</b> hay una carga sin factura o sin tipo de cambio; se usó el último precio conocido.`);
+  /* cereal más caro */
+  const conGas = cereales.filter(c => M[c].tn > 0 && M[c].usTp > 0);
+  if (conGas.length > 1) {
+    const orden = conGas.slice().sort((a, b) => M[b].usTp - M[a].usTp), alto = orden[0], bajo = orden[orden.length - 1];
+    const pct = (M[alto].usTp / M[bajo].usTp - 1) * 100;
+    if (pct >= 5) items.push(`<b>${esc(alto)} gastó más gas por punto que ${esc(bajo.toLowerCase())}</b> (${us(M[alto].usTp)} contra ${us(M[bajo].usTp)}, un ${num(pct)} % más). Conviene seguirlo el mes que viene para ver si se repite.`);
+  }
+  /* gas sin pasada */
+  if (sinP.kg > 50) items.push(`<b>${num(sinP.kg)} kg de gas sin pasada registrada</b>${hayCosto ? ` (${us(sinP.us, 0)})` : ''}: bajó entre dos lecturas sin ninguna pasada en el medio. Puede ser un arranque, una prueba o una pasada que falta cargar.`);
+  /* primeras sin repaso al cierre */
+  cereales.forEach(c => {
+    let pool = []; P.filter(p => p.c === c).forEach(p => {
+      if (p.t === 'Primera de dos') pool.push({ f: p.f, tn: p.tn, orig: p.tn });
+      else if (p.t === 'Repaso') {
+        let falta = p.tn;
+        pool.forEach(l => { if (falta <= 0) return; const t = Math.min(l.tn, falta); l.tn -= t; falta -= t; if (l.tn < l.orig * 0.08) l.tn = 0; });
+        pool = pool.filter(l => l.tn > 0);
+      }
+    });
+    const tn = pool.reduce((s, l) => s + l.tn, 0);
+    if (tn > 10) items.push(`<b>Quedaron ${num(tn, 2)} tn de ${c.toLowerCase()} con una sola pasada</b> (Primera de dos del ${pool.map(l => fecha(l.f)).join(', ')}). Su repaso va a gastar gas el mes que viene.`);
+  });
+  if (!items.length) { $('bMirar').remove(); return; }
+  $('mirar').innerHTML = items.map(i => `<li>${i}</li>`).join('');
+})();
+
+/* ===== detalle de pasadas ===== */
+$('tPasadas').innerHTML = `<thead><tr><th>Fecha</th><th class="izq">Cereal</th><th class="izq">Tipo</th><th>Chapas</th><th>Toneladas</th><th>Gas (kg)</th><th>Costo gas</th><th>US$ / tn·pto</th></tr></thead><tbody>` +
+  P.map(p => `<tr><td>${fecha(p.f)}</td><td class="izq">${punto(COLOR[p.c])}${esc(p.c)}</td><td class="izq"><span class="tag ${p.t === 'Primera de dos' ? 'primera' : ''}">${p.t}</span></td><td>${num(p.ch, 1)}</td><td>${num(p.tn, 2)}</td><td>${p.kg ? num(p.kg) : '—'}</td><td>${hayCosto && p.kg ? us(p.us, 0) : '—'}</td><td>${hayCosto && p.kg && p.tn ? num(p.us / (p.tn * PUNTOS), 2) : '—'}</td></tr>`).join('') +
+  `</tbody><tfoot><tr><td>Total</td><td></td><td></td><td>${num(sum(P, 'ch'), 1)}</td><td>${num(T.tn, 2)}</td><td>${num(sum(P, 'kg'))}</td><td>${hayCosto ? us(sum(P, 'us'), 0) : '—'}</td><td>${hayCosto && T.tn ? num(sum(P, 'us') / (T.tn * PUNTOS), 2) : '—'}</td></tr></tfoot>`;
+
+/* ===== cómo se calcula ===== */
+$('notas').innerHTML =
+  `<p><b>Toneladas.</b> Salen del cubicaje de cada pasada: chapas del silo de origen y forma del grano al empezar y al terminar (copete, enrasado o embudo), con densidad ${D.densidades}. Si un grano pasa dos veces, cuenta las dos.</p>` +
+  `<p><b>Puntos.</b> La humedad no se mide en cada pasada: se toma que cada pasada saca 2,5 puntos.</p>` +
+  `<p><b>Gas.</b> Lecturas de los relojes de los 3 tubos de ${num(D.litrosTubo)} L (1 punto de reloj = ${num(D.kgPorPunto, 1)} kg de propano). El reloj tiene un error de 1 a 2 puntos, por eso conviene mirar el mes completo y no una lectura suelta.</p>` +
+  `<p><b>Precio.</b> Precio de factura de YPF Gas pasado a dólares con el tipo de cambio de cada factura, promediado con el gas que ya había en los tubos${hayCosto && T.kg ? ` (en ${nomMes}, ${us(T.costo / T.kg, 3)} por kg en promedio)` : ''}.</p>` +
+  `<p><b>Qué no incluye.</b> Solo el gas. No incluye electricidad, mano de obra, mantenimiento de la secadora ni la merma de peso del grano.</p>`;
+})();
+</script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
@@ -2296,6 +2733,7 @@ $('pasCerrar').onclick = () => document.getElementById('modalPasadas').classList
 $('opConfig').onclick = abrirConfig;
 $('configCerrar').onclick = () => document.getElementById('modalConfig').classList.remove('abierto');
 $('opGas').onclick = abrirGas;
+$('opInforme').onclick = abrirInforme;
 $('gasCerrar').onclick = () => document.getElementById('modalGas').classList.remove('abierto');
 $('gasImprimir').onclick = () => window.print();
 $('pasImprimir').onclick = () => window.print();
@@ -3487,6 +3925,111 @@ function pintarGasTabla(pasadas) {
     "Costo / tn·punto" es el costo del gas del mes dividido por el trabajo de la secadora: toneladas de cada pasada × 2,5 puntos (se supone que cada pasada baja 2,5 puntos, porque la humedad no se mide). Es el número que se compara con la tarifa de secada por tonelada y por punto.
     "Tn despachadas" son las salidas por venta y los retiros de productor de la planta de la secadora, pesados en balanza: sirven para controlar las toneladas de las pasadas.</p>`;
 }
+
+
+/* ============================================================
+   INFORME DEL MES (para presentar): toneladas, gas, costo por tn·punto,
+   control con los remitos de YPF y gas en los tubos. Se arma con los datos de la Sheet
+   y se muestra en un marco aparte, con sus propios estilos, listo para imprimir o guardar en PDF.
+   ============================================================ */
+let informeHtml = '';
+const fechaInf = fh => `${fh.slice(8, 10)}/${fh.slice(5, 7)}`;
+
+function mesesConDatos() {
+  const m = new Set();
+  pasadasCache.forEach(p => { const k = String(p.Fecha || '').slice(0, 7); if (/^\d{4}-\d{2}$/.test(k)) m.add(k); });
+  lecturasGas.forEach(l => m.add(l.fh.slice(0, 7)));
+  return [...m].sort().reverse();
+}
+
+function datosInforme(mes) {
+  const pasadasMes = pasadasCache.filter(p => String(p.Fecha || '').slice(0, 7) === mes)
+    .slice().sort((a, b) => String(a.Fecha).slice(0, 10).localeCompare(String(b.Fecha).slice(0, 10)));
+  const g = gasPorPasada(pasadasCache, lecturasGas, facturasGas);
+  const cu = costeoGas(lecturasGas, facturasGas, precioFacturaUSD);
+  const cm = cu && cu.meses[mes];
+  const rel = resumenPorMes(lecturasGas)[mes];
+  const pasadas = pasadasMes.map(p => {
+    const r = g.porPasada.get(p);
+    return { f: String(p.Fecha).slice(0, 10), c: nombreCereal(cerealDeReporte(p.Cereal)), t: TIPOS_PASADA[tipoDePasada(p)],
+      ch: Number(p.Chapas) || 0, tn: Number(p.Toneladas) || 0, kg: r ? r.kg : 0, us: r && !r.sinPrecio ? r.costo : 0 };
+  });
+  const sp = g.sinPasada.filter(x => x.mes === mes);
+  /* lecturas: la última del mes anterior (punto de partida) y todas las del mes */
+  const idx = lecturasGas.map((l, i) => l.fh.slice(0, 7) === mes ? i : -1).filter(i => i >= 0);
+  const desde = idx.length ? Math.max(idx[0] - 1, 0) : 0;
+  const lects = idx.length ? lecturasGas.slice(desde, idx[idx.length - 1] + 1) : [];
+  const ini = idx.length && idx[0] > 0 ? lecturasGas[idx[0] - 1] : null;
+  const fin = idx.length ? lecturasGas[idx[idx.length - 1]] : null;
+  const ordenC = Object.keys(NOMBRES), cerealesMes = [...new Set(pasadasMes.map(p => cerealDeReporte(p.Cereal)))].sort((a, b) => ((ordenC.indexOf(a) + 1) || 99) - ((ordenC.indexOf(b) + 1) || 99));
+  const hoy = new Date();
+  return {
+    mes, enCurso: mes >= hoyLocal().slice(0, 7), puntos: PUNTOS_POR_PASADA, logo: typeof LOGO_SRC !== 'undefined' ? LOGO_SRC : '',
+    emitido: `${pad2(hoy.getDate())}/${pad2(hoy.getMonth() + 1)}/${hoy.getFullYear()}`,
+    pasadas, totalKg: rel && rel.intervalos ? rel.relojKg : 0, totalUs: cm ? cm.costo : 0, provisorio: !!(cm && cm.provisorio),
+    sinPasada: { kg: sp.reduce((a, x) => a + x.kg, 0), us: sp.reduce((a, x) => a + (x.costo || 0), 0) },
+    gas: {
+      inicio: ini ? { f: fechaInf(ini.fh), kg: stockKg(ini) } : null,
+      final: fin && ini ? { f: fechaInf(fin.fh), kg: stockKg(fin) } : null,
+      remitos: lecturasGas.filter(l => l.fh.slice(0, 7) === mes && l.tipo === 'despues' && l.remito > 0).map(l => ({ f: fechaInf(l.fh), kg: l.remito })),
+      tubosKg: IDS_TUBO.reduce((a, id) => a + kgDe(id, 100), 0)
+    },
+    lecturas: lects.map(l => ({ t: l.fh, kg: stockKg(l), pct: IDS_TUBO.map(id => l.pct[id]), m: l.tipo, remito: l.remito })),
+    kgPorPunto: kgDe('T1', 1), litrosTubo: TUBOS_GAS.T1.litros,
+    densidades: (cerealesMes.length ? cerealesMes : ['maiz', 'soja'])
+      .map(c => `${num(DENSIDAD[c] || 0.7, 2)} t/m³ para ${nombreCereal(c).toLowerCase()}`)
+      .reduce((txt, x, i, a) => txt + (i === 0 ? '' : i === a.length - 1 ? ' y ' : ', ') + x, '')
+  };
+}
+
+function htmlInforme(d) {
+  const t = id => document.getElementById(id).textContent;
+  const datos = JSON.stringify(d).replace(/</g, '\\u003c');
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">` +
+    `<title>Informe de secado ${d.mes}</title><style>${t('tplInformeCss')}</style></head><body>${t('tplInformeHtml')}` +
+    `<script>window.D = ${datos};<\/script><script>${t('tplInformeJs')}<\/script></body></html>`;
+}
+
+function pintarInforme() {
+  const mes = $('infMes').value;
+  if (!mes) return;
+  informeHtml = htmlInforme(datosInforme(mes));
+  $('infMarco').srcdoc = informeHtml;
+}
+
+async function abrirInforme() {
+  $('visorInforme').classList.add('abierto');
+  $('infEstado').textContent = 'Cargando datos de la Sheet…';
+  $('infMarco').srcdoc = '';
+  const remoto = await fetchSheet();
+  if (remoto) {
+    cargarLecturasGas(remoto);
+    cargarFacturasGas(remoto);
+    pasadasCache = remoto.PasadasSecado || pasadasCache;
+    $('infEstado').textContent = '';
+  } else {
+    $('infEstado').textContent = 'No se pudo leer la Sheet: se usan los últimos datos cargados en este equipo.';
+  }
+  const meses = mesesConDatos();
+  if (!meses.length) { $('infMes').innerHTML = ''; $('infEstado').textContent = 'Todavía no hay pasadas ni lecturas de gas cargadas.'; return; }
+  const ahora = hoyLocal().slice(0, 7), previo = $('infMes').value;
+  /* por defecto, el último mes cerrado; si no hay, el más reciente */
+  const def = meses.includes(previo) ? previo : (meses.find(m => m < ahora) || meses[0]);
+  $('infMes').innerHTML = meses.map(m => `<option value="${m}">${nombreMes(m).replace(/^./, c => c.toUpperCase())} ${m.slice(0, 4)}${m === ahora ? ' (en curso)' : ''}</option>`).join('');
+  $('infMes').value = def;
+  pintarInforme();
+}
+
+$('infMes').addEventListener('change', pintarInforme);
+$('infCerrar').onclick = () => $('visorInforme').classList.remove('abierto');
+$('infImprimir').onclick = () => { const w = $('infMarco').contentWindow; if (w) { w.focus(); w.print(); } };
+$('infAparte').onclick = () => {
+  if (!informeHtml) return;
+  const url = URL.createObjectURL(new Blob([informeHtml], { type: 'text/html' }));
+  const w = window.open(url, '_blank');
+  if (!w) $('infEstado').textContent = 'El navegador bloqueó la ventana nueva: permití las ventanas emergentes o usá Imprimir / PDF.';
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+};
 
 /* eventos de la pantalla de gas (lecturas y parámetros de los tubos) */
 ['lecFecha', 'lecHora', 'lecTipo', 'lecT1', 'lecT2', 'lecT3', 'lecRemito'].forEach(id => {
