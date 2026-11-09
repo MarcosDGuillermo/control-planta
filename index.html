@@ -342,7 +342,7 @@
   <div class="grupo" id="grupoCierre">
     <div class="rot">Cierre de mes</div>
     <div class="botones">
-      <button id="opInforme" class="fuerte">Informe del mes</button>
+      <button id="opInforme" class="fuerte">Informe de secado</button>
       <button id="opDespachos">Despachos por balanza</button>
       <button id="opRecorridaCierre">Recorrida de silos</button>
     </div>
@@ -657,8 +657,9 @@
 
 <div class="visor-informe" id="visorInforme" role="dialog" aria-label="Informe del mes">
   <div class="barra">
-    <b>Informe del mes</b>
-    <select id="infMes" aria-label="Mes del informe"></select>
+    <b>Informe de secado</b>
+    <label class="estado">Desde <select id="infDesde" aria-label="Desde el mes"></select></label>
+    <label class="estado">Hasta <select id="infHasta" aria-label="Hasta el mes"></select></label>
     <span class="estado" id="infEstado"></span>
     <div class="der">
       <button id="infImprimir" class="fuerte">Imprimir / PDF</button>
@@ -666,7 +667,7 @@
       <button id="infCerrar">Cerrar</button>
     </div>
   </div>
-  <iframe id="infMarco" title="Informe del mes"></iframe>
+  <iframe id="infMarco" title="Informe de secado"></iframe>
 </div>
 
 <!-- plantilla del informe del mes: estilos, cuerpo y código. La app la completa con los datos del mes. -->
@@ -749,6 +750,8 @@
     h2 + .bajada, .leyenda { break-after: avoid; }
     .dos, .notas, footer { break-inside: avoid; }
     footer { break-before: avoid; margin-top: 14px; }
+    .fin, #bMeses, #bCtlMeses { break-inside: avoid; }
+    .fin h2 { margin-top: 18px; }
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
 </script>
@@ -775,8 +778,16 @@
 </div>
 <div class="ejemplo" id="ejemplo"></div>
 
+<div id="bMeses">
+<h2>Mes por mes</h2>
+<p class="bajada">Costo de gas por tonelada y punto de cada mes, por cereal.</p>
+<div class="leyenda" id="lMeses"></div>
+<div class="grafico" id="gMeses"></div>
+<div class="ancho"><table id="tMeses"></table></div>
+</div>
+
 <h2>Actividad de la secadora</h2>
-<p class="bajada">Toneladas de cada pasada, por fecha. Con rayado, la Primera de dos: el grano necesita un repaso para quedar listo.</p>
+<p class="bajada" id="bajActividad"></p>
 <div class="leyenda" id="lActividad"></div>
 <div class="grafico" id="gActividad"></div>
 
@@ -786,8 +797,9 @@
   <div class="ancho"><table id="tGasCtl" class="gasctl"></table></div>
   <p class="notas" id="nGasCtl" style="margin:0"></p>
 </div>
+<div class="ancho" id="bCtlMeses" style="margin-top:14px"><table id="tCtlMeses"></table></div>
 
-<h2>Gas en los tubos durante el mes</h2>
+<h2 id="hTubos">Gas en los tubos durante el mes</h2>
 <p class="bajada">Propano en los tres tubos según cada lectura de los relojes. Los saltos para arriba son las cargas de YPF.</p>
 <div class="grafico" id="gTubos"></div>
 
@@ -800,19 +812,23 @@
 <p class="bajada">El gas de cada pasada sale de los relojes de los tubos: lo que bajó entre dos lecturas se reparte entre las pasadas de ese tramo según sus toneladas. Por eso una pasada suelta puede salir más cara o más barata que otra; el número confiable es el total del mes.</p>
 <div class="ancho"><table id="tPasadas"></table></div>
 
+<div class="fin">
 <h2>Cómo se calcula</h2>
 <div class="notas" id="notas"></div>
 
 <footer><span>Control de planta · Cereales Lobería S.A.</span><span>Datos: pasadas, lecturas de gas, remitos y facturas cargados en la app.</span></footer>
 </div>
+</div>
 </script>
-<script type="text/plain" id="tplInformeJs">/* Informe del mes: este código corre dentro del informe y dibuja todo a partir de window.D, que arma la app */
+<script type="text/plain" id="tplInformeJs">/* Informe de secado: este código corre dentro del informe y dibuja todo a partir de window.D, que arma la app.
+   Sirve para un mes o para un período de varios meses (D.meses). */
 (function () {
 const D = window.D;
 const PUNTOS = D.puntos;
 const PALETA = { 'Maíz': '#eb6834', 'Soja': '#2a78d6', 'Trigo': '#1baf7a', 'Girasol': '#6250d6', 'Cebada forrajera': '#e87ba4', 'Cebada cervecera': '#008300' };
 const OTROS = ['#1baf7a', '#6250d6', '#e87ba4', '#008300'];
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const MES3 = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
 /* ===== utilidades ===== */
 const num = (n, d = 0) => (Number(n) || 0).toLocaleString('es-AR', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -826,6 +842,10 @@ const txt = (s, at, padre) => { const e = el('text', at, padre); e.textContent =
 const punto = c => `<span class="punto" style="background:${c}"></span>`;
 const listaY = a => a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' y ' + a[a.length - 1];
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const nomMes = m => MESES[Number(m.slice(5, 7)) - 1];
+const Cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+const mesLargo = m => `${Cap(nomMes(m))} ${m.slice(0, 4)}`;
+const mesCorto = m => `${MES3[Number(m.slice(5, 7)) - 1]} ${m.slice(2, 4)}`;
 function tooltip(cont) {
   const t = document.createElement('div'); t.className = 'tip'; cont.appendChild(t);
   return {
@@ -837,15 +857,24 @@ function tooltip(cont) {
 }
 function barraV(x, y, w, h, r = 4) { r = Math.min(r, h, w / 2); return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`; }
 function barraH(x, y, w, h, r = 4) { r = Math.min(r, w, h / 2); return `M${x},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h - r}Q${x + w},${y + h} ${x + w - r},${y + h}H${x}Z`; }
-const pasoEje = max => { const b = [50, 100, 200, 250, 500, 1000, 2000, 2500, 5000]; return b.find(p => max / p <= 5) || 10000; };
+const pasoEje = max => { const b = [0.25, 0.5, 1, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000]; return b.find(p => max / p <= 5) || 10000; };
 
-/* ===== cabecera ===== */
-const [anio, mesN] = D.mes.split('-').map(Number), nomMes = MESES[mesN - 1], Mes = nomMes[0].toUpperCase() + nomMes.slice(1);
-const dias = new Date(anio, mesN, 0).getDate(), mm = String(mesN).padStart(2, '0');
-document.title = `Informe de secado — ${Mes} ${anio}`;
+/* ===== período ===== */
+const MS = D.meses, unMes = MS.length === 1, m0 = MS[0], m1 = MS[MS.length - 1];
+const ini = new Date(+m0.slice(0, 4), +m0.slice(5, 7) - 1, 1), fin = new Date(+m1.slice(0, 4), +m1.slice(5, 7), 1);   /* fin: primer día después del período */
+const ultimoDia = new Date(fin.getTime() - 86400000);
+const fmt = d => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+const nombrePeriodo = unMes ? mesLargo(m0) : (m0.slice(0, 4) === m1.slice(0, 4) ? `${Cap(nomMes(m0))} a ${nomMes(m1)} ${m1.slice(0, 4)}` : `${mesLargo(m0)} a ${nomMes(m1)} ${m1.slice(0, 4)}`);
+const enPeriodo = unMes ? `En ${nomMes(m0)}` : `Entre ${nomMes(m0)} y ${nomMes(m1)}`;
+const elPeriodo = unMes ? 'el mes' : 'el período';
+document.title = `Informe de secado — ${nombrePeriodo}`;
 $('logo').src = D.logo;
-$('titulo').textContent = `Informe de secado — ${Mes} ${anio}`;
-$('meta').innerHTML = D.enCurso ? `Mes en curso: datos hasta el ${D.emitido.slice(0, 5)}<br>Emitido: ${D.emitido}` : `Período: 1 al ${dias}/${mm}/${anio}<br>Emitido: ${D.emitido}`;
+$('titulo').textContent = `Informe de secado — ${nombrePeriodo}`;
+$('meta').innerHTML = (D.enCurso ? `Período: ${fmt(ini)} al ${D.emitido} (${unMes ? 'mes' : 'último mes'} en curso)` : `Período: ${fmt(ini)} al ${fmt(ultimoDia)}`) + `<br>Emitido: ${D.emitido}`;
+if (!unMes) {
+  $('hTubos').textContent = 'Gas en los tubos durante el período';
+  document.querySelector('#nGasCtl').closest('.dos').previousElementSibling.textContent = 'Lo que había en los tubos al empezar, más lo que entró por remito, menos lo que marcan los relojes, tiene que dar lo que quedó al final del período.';
+}
 
 /* ===== cálculos ===== */
 const P = D.pasadas;
@@ -853,33 +882,41 @@ const ORDEN = Object.keys(PALETA);
 const cereales = [...new Set(P.map(p => p.c))].sort((a, b) => ((ORDEN.indexOf(a) + 1) || 99) - ((ORDEN.indexOf(b) + 1) || 99));
 const COLOR = {}; let iOtro = 0;
 cereales.forEach(c => { COLOR[c] = PALETA[c] || OTROS[iOtro++ % OTROS.length]; });
-const tnPts = P.reduce((s, p) => s + p.tn, 0) * PUNTOS;
-const M = Object.fromEntries(cereales.map(c => {
-  const p = P.filter(x => x.c === c), tn = sum(p, 'tn'), kg = sum(p, 'kg'), costo = sum(p, 'us');
-  return [c, { c, n: p.length, tn, kg, costo, kgTp: tn ? kg / (tn * PUNTOS) : 0, usTp: tn ? costo / (tn * PUNTOS) : 0 }];
-}));
+const resumir = p => { const tn = sum(p, 'tn'), kg = sum(p, 'kg'), costo = sum(p, 'us');
+  return { n: p.length, tn, kg, costo, kgTp: tn ? kg / (tn * PUNTOS) : 0, usTp: tn ? costo / (tn * PUNTOS) : 0 }; };
+const M = Object.fromEntries(cereales.map(c => [c, { c, ...resumir(P.filter(x => x.c === c)) }]));
 const sinP = D.sinPasada;   /* gas que bajó en tramos sin ninguna pasada */
+const tnPts = sum(P, 'tn') * PUNTOS;
 const T = { n: P.length, tn: sum(P, 'tn'), kg: D.totalKg, costo: D.totalUs };
 T.kgTp = tnPts ? T.kg / tnPts : 0; T.usTp = tnPts ? T.costo / tnPts : 0;
 const hayCosto = T.costo > 0;
+/* mes por mes: el total del mes sale de los relojes (incluye gas sin pasada); por cereal, de las pasadas */
+const PM = D.porMes.map(r => {
+  const p = P.filter(x => x.f.slice(0, 7) === r.mes), tn = sum(p, 'tn');
+  return { ...r, n: p.length, tn, usTp: tn ? r.us / (tn * PUNTOS) : 0, kgTp: tn ? r.kg / (tn * PUNTOS) : 0,
+    cer: Object.fromEntries(cereales.map(c => [c, resumir(p.filter(x => x.c === c))])) };
+});
 
 /* ===== sin datos ===== */
 if (!P.length && !(T.kg > 0)) {
   document.querySelector('.hoja').innerHTML = document.querySelector('header').outerHTML +
-    `<p class="resumen">No hay pasadas ni lecturas de gas cargadas en ${nomMes} de ${anio}.</p>`;
+    `<p class="resumen">No hay pasadas ni lecturas de gas cargadas ${unMes ? 'en ' + nomMes(m0) + ' de ' + m0.slice(0, 4) : 'en el período'}.</p>`;
   return;
 }
 
 /* ===== resumen e indicadores ===== */
 $('resumen').innerHTML =
-  `En ${nomMes} la secadora hizo <b>${T.n} ${T.n === 1 ? 'pasada' : 'pasadas'}</b> por <b>${num(T.tn)} toneladas</b> y consumió <b>${num(T.kg)} kg de gas</b>` +
+  `${enPeriodo} la secadora hizo <b>${T.n} ${T.n === 1 ? 'pasada' : 'pasadas'}</b> por <b>${num(T.tn)} toneladas</b> y consumió <b>${num(T.kg)} kg de gas</b>` +
   (hayCosto ? ` (${us(T.costo, 0)}). ` : '. ') +
   (hayCosto && tnPts ? `Tomando 2,5 puntos por pasada, el gas costó <b>${us(T.usTp)} por tonelada y punto</b>` +
     (cereales.length > 1 ? `: ${listaY(cereales.map(c => `${us(M[c].usTp)} en ${c.toLowerCase()}`))}.` : '.') : '') +
+  (!unMes && hayCosto && PM.filter(r => r.usTp > 0).length > 1 ? ' ' + (() => {
+    const v = PM.filter(r => r.usTp > 0), alto = v.reduce((a, b) => b.usTp > a.usTp ? b : a), bajo = v.reduce((a, b) => b.usTp < a.usTp ? b : a);
+    return `El mes más caro fue ${nomMes(alto.mes)} (${us(alto.usTp)}) y el más barato ${nomMes(bajo.mes)} (${us(bajo.usTp)}).`; })() : '') +
   (!hayCosto ? ' Falta cargar la factura de YPF para valorizar el gas.' : '');
 const kpi = (rot, cifra, unidad, nota, cls = '') => `<div class="kpi ${cls}"><div class="rot">${rot}</div><div class="cifra">${cifra}<small>${unidad}</small></div>${nota ? `<div class="nota">${nota}</div>` : ''}</div>`;
 $('kpis').innerHTML =
-  kpi('Pasadas por la secadora', num(T.tn), 'tn', `${T.n} ${T.n === 1 ? 'pasada' : 'pasadas'}`) +
+  kpi('Pasadas por la secadora', num(T.tn), 'tn', `${T.n} ${T.n === 1 ? 'pasada' : 'pasadas'}${unMes ? '' : ' en ' + MS.length + ' meses'}`) +
   kpi('Gas consumido', num(T.kg), 'kg', tnPts ? `${num(T.kgTp, 2)} kg por tn·punto` : '') +
   kpi('Costo del gas', hayCosto ? num(T.costo) : '—', hayCosto ? 'US$' : '', hayCosto ? 'a precio de factura' : 'falta factura') +
   kpi('Costo por tn·punto', hayCosto && tnPts ? num(T.usTp, 2) : '—', hayCosto && tnPts ? 'US$' : '', cereales.length > 1 && hayCosto ? cereales.map(c => `${c.toLowerCase()} ${num(M[c].usTp, 2)}`).join(' · ') : '', 'destacado');
@@ -925,61 +962,123 @@ $('tCereal').innerHTML = `<thead><tr><th>Cereal</th><th>Tn pasadas</th><th>Gas (
     `Ejemplo: 100 tn de ${c0.toLowerCase()} con dos pasadas gastan 100 × 5 × ${us(M[c0].usTp)} = ${us(100 * 2 * PUNTOS * M[c0].usTp, 0)} de gas.`;
 })();
 
-/* ===== gráfico: actividad ===== */
+/* ===== mes por mes (solo en un período de varios meses) ===== */
 (function () {
-  const cont = $('gActividad');
+  if (unMes) { $('bMeses').remove(); return; }
+  const series = [...cereales.map(c => ({ et: c, color: COLOR[c], v: r => r.cer[c].usTp })), ...(cereales.length > 1 ? [{ et: 'Total del mes', color: '#4A585C', v: r => r.usTp }] : [])];
+  $('lMeses').innerHTML = series.map(s => `<span>${punto(s.color)}${esc(s.et)}</span>`).join('');
+  const cont = $('gMeses'), W = 760, H = 230, izq = 40, der = 6, top = 16, base = H - 26;
+  const vmax = Math.max(0.5, ...PM.flatMap(r => series.map(s => s.v(r)))), max = Math.ceil(vmax * 1.15 / 0.5) * 0.5, y = v => base - (base - top) * v / max;
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Costo de gas por tonelada y punto de cada mes' }, cont);
+  for (let v = 0; v < max - 1e-9; v += 0.5) {
+    el('line', { x1: izq, x2: W - der, y1: y(v), y2: y(v), stroke: v ? '#E4E8E7' : '#1E2628', 'stroke-width': 1 }, svg);
+    txt(num(v, 1), { x: izq - 6, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 10.5, fill: '#6E7B7E' }, svg);
+  }
+  txt('US$', { x: izq - 6, y: top - 4, 'text-anchor': 'end', 'font-size': 10.5, fill: '#6E7B7E' }, svg);
+  const grupo = (W - izq - der) / PM.length, bw = Math.min(34, (grupo * 0.78) / series.length), tip = tooltip(cont);
+  PM.forEach((r, i) => {
+    const x0 = izq + i * grupo + (grupo - bw * series.length) / 2;
+    txt(mesCorto(r.mes), { x: izq + i * grupo + grupo / 2, y: H - 8, 'text-anchor': 'middle', 'font-size': 10.5, fill: '#6E7B7E' }, svg);
+    series.forEach((s, k) => { const v = s.v(r); if (!(v > 0)) return;
+      el('path', { d: barraV(x0 + k * bw + 1, y(v), bw - 2, base - y(v)), fill: s.color }, svg);
+      if (bw >= 26) txt(num(v, 2), { x: x0 + k * bw + bw / 2, y: y(v) - 4, 'text-anchor': 'middle', 'font-size': 9.5, fill: '#4A585C' }, svg); });
+    const hit = el('rect', { x: izq + i * grupo, y: top, width: grupo, height: base - top, fill: 'transparent' }, svg);
+    hit.addEventListener('mousemove', ev => tip.show(`<b>${mesLargo(r.mes)}</b><br>` + series.map(s => `${esc(s.et)}: ${s.v(r) > 0 ? us(s.v(r)) : '—'}`).join('<br>') + `<br>${num(r.tn)} tn · ${num(r.kg)} kg de gas`, ev));
+    hit.addEventListener('mouseleave', () => tip.hide());
+  });
+  $('tMeses').innerHTML = `<thead><tr><th>Mes</th><th>Pasadas</th><th>Tn pasadas</th><th>Gas (kg)</th><th>Costo gas (US$)</th>${cereales.map(c => `<th>US$ / tn·pto ${esc(c.toLowerCase())}</th>`).join('')}<th>US$ / tn·pto total</th></tr></thead><tbody>` +
+    PM.map(r => `<tr><td>${mesLargo(r.mes)}${r.enCurso ? ' <span class="tag">en curso</span>' : ''}</td><td>${r.n}</td><td>${num(r.tn)}</td><td>${num(r.kg)}</td><td>${hayCosto ? num(r.us) : '—'}</td>${cereales.map(c => `<td>${r.cer[c].usTp > 0 ? num(r.cer[c].usTp, 2) : '—'}</td>`).join('')}<td>${r.usTp > 0 ? num(r.usTp, 2) : '—'}</td></tr>`).join('') +
+    `</tbody><tfoot><tr><td>Período</td><td>${T.n}</td><td>${num(T.tn)}</td><td>${num(T.kg)}</td><td>${hayCosto ? num(T.costo) : '—'}</td>${cereales.map(c => `<td>${M[c].usTp > 0 ? num(M[c].usTp, 2) : '—'}</td>`).join('')}<td>${T.usTp > 0 ? num(T.usTp, 2) : '—'}</td></tr></tfoot>`;
+})();
+
+/* ===== gráfico: actividad (por día; con períodos largos, por semana o por mes) ===== */
+(function () {
+  const cont = $('gActividad'), diasP = Math.round((fin - ini) / 86400000);
+  const modo = diasP <= 62 ? 'dia' : diasP <= 185 ? 'semana' : 'mes';
+  $('bajActividad').textContent = modo === 'dia'
+    ? 'Toneladas de cada pasada, por fecha. Con rayado, la Primera de dos: el grano necesita un repaso para quedar listo.'
+    : `Toneladas pasadas por la secadora en cada ${modo}, por cereal.`;
   $('lActividad').innerHTML = cereales.map(c => `<span>${punto(COLOR[c])}${esc(c)}</span>`).join('') +
-    (P.some(p => p.t === 'Primera de dos') ? `<span><svg width="16" height="11" style="margin-right:6px"><rect width="16" height="11" rx="2" fill="url(#rayaL)"/></svg>Primera de dos (falta repaso)</span>` : '');
+    (modo === 'dia' && P.some(p => p.t === 'Primera de dos') ? `<span><svg width="16" height="11" style="margin-right:6px"><rect width="16" height="11" rx="2" fill="url(#rayaL)"/></svg>Primera de dos (falta repaso)</span>` : '');
   const W = 760, H = 250, izq = 40, der = 6, top = 14, base = H - 26;
-  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Toneladas por pasada a lo largo de ${nomMes}` }, cont);
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Toneladas pasadas por la secadora en el período' }, cont);
   const defs = el('defs', {}, svg);
   const raya = (id, col) => { const p = el('pattern', { id, width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
     el('rect', { width: 6, height: 6, fill: col, 'fill-opacity': 0.28 }, p); el('line', { x1: 0, y1: 0, x2: 0, y2: 6, stroke: col, 'stroke-width': 3 }, p); };
   cereales.forEach((c, i) => raya('raya' + i, COLOR[c])); raya('rayaL', '#4A585C');
-  const tmax = Math.max(100, ...P.map(p => p.tn)), paso = pasoEje(tmax * 1.1), max = Math.ceil(tmax * 1.12 / paso) * paso + paso * 0.25, y = v => base - (base - top) * v / max;
-  const ancho = (W - izq - der) / dias, xDia = d => izq + (d - 1) * ancho;
+  /* cubetas: cada una con su etiqueta y sus pasadas */
+  const dDe = f => new Date(+f.slice(0, 4), +f.slice(5, 7) - 1, +f.slice(8, 10));
+  let cub = [];
+  if (modo === 'dia') for (let i = 0; i < diasP; i++) { const d = new Date(ini.getTime() + i * 86400000); cub.push({ d, lista: [] }); }
+  else if (modo === 'semana') { let d = new Date(ini); while (d < fin) { cub.push({ d: new Date(d), lista: [] }); d = new Date(d.getTime() + 7 * 86400000); } }
+  else MS.forEach(m => cub.push({ d: new Date(+m.slice(0, 4), +m.slice(5, 7) - 1, 1), m, lista: [] }));
+  P.forEach(p => { const d = dDe(p.f);
+    const i = modo === 'dia' ? Math.round((d - ini) / 86400000) : modo === 'semana' ? Math.floor((d - ini) / (7 * 86400000)) : MS.indexOf(p.f.slice(0, 7));
+    if (cub[i]) cub[i].lista.push(p); });
+  /* altura: por día cada pasada es una barra; por semana o mes, una barra por cereal con la suma */
+  const barras = cub.map(c => modo === 'dia' ? c.lista.map(p => ({ v: p.tn, c: p.c, prim: p.t === 'Primera de dos', p }))
+    : cereales.map(ce => ({ v: c.lista.filter(p => p.c === ce).reduce((s, p) => s + p.tn, 0), c: ce })).filter(b => b.v > 0));
+  const tmax = Math.max(100, ...barras.flat().map(b => b.v)), paso = pasoEje(tmax * 1.1), max = Math.ceil(tmax * 1.12 / paso) * paso + paso * 0.25, y = v => base - (base - top) * v / max;
   for (let v = 0; v < max; v += paso) {
     el('line', { x1: izq, x2: W - der, y1: y(v), y2: y(v), stroke: v ? '#E4E8E7' : '#1E2628', 'stroke-width': 1 }, svg);
     txt(num(v), { x: izq - 6, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 10.5, fill: '#6E7B7E' }, svg);
   }
   txt('tn', { x: izq - 6, y: top - 2, 'text-anchor': 'end', 'font-size': 10.5, fill: '#6E7B7E' }, svg);
-  [1, 5, 10, 15, 20, 25, dias].forEach(d => txt(String(d).padStart(2, '0') + '/' + mm, { x: xDia(d) + ancho / 2, y: H - 8, 'text-anchor': 'middle', 'font-size': 10.5, fill: '#6E7B7E' }, svg));
-  const tip = tooltip(cont);
-  const porDia = {};
-  P.forEach(p => { const d = +p.f.slice(8, 10); (porDia[d] = porDia[d] || []).push(p); });
-  Object.keys(porDia).forEach(dk => {
-    const d = +dk, lista = porDia[d], bw = (ancho - 4) / lista.length;
-    lista.forEach((p, k) => {
-      const x = xDia(d) + 2 + k * bw, h = base - y(p.tn), prim = p.t === 'Primera de dos', ic = cereales.indexOf(p.c);
-      el('path', { d: barraV(x + (lista.length > 1 ? 0.5 : 0), y(p.tn), bw - (lista.length > 1 ? 1 : 0), h), fill: prim ? `url(#raya${ic})` : COLOR[p.c], stroke: prim ? COLOR[p.c] : 'none', 'stroke-width': prim ? 1.5 : 0 }, svg);
-      if (p.tn >= tmax * 0.75 && lista.length === 1) txt(num(p.tn), { x: x + bw / 2, y: y(p.tn) - 5, 'text-anchor': 'middle', 'font-size': 10, fill: '#4A585C' }, svg);
+  const ancho = (W - izq - der) / cub.length, tip = tooltip(cont);
+  /* etiquetas del eje x */
+  cub.forEach((c, i) => {
+    const d = c.d, x = izq + i * ancho + ancho / 2;
+    const marca = modo === 'mes' ? mesCorto(c.m) : modo === 'semana' ? (i % 2 === 0 ? fecha(fmt(d).split('/').reverse().join('-')) : '')
+      : ([1, 10, 20].includes(d.getDate()) || i === cub.length - 1 ? fecha(fmt(d).split('/').reverse().join('-')) : '');
+    if (marca) txt(marca, { x, y: H - 8, 'text-anchor': 'middle', 'font-size': 10.5, fill: '#6E7B7E' }, svg);
+  });
+  cub.forEach((c, i) => {
+    const bs = barras[i]; if (!bs.length) return;
+    const bw = (ancho - (modo === 'dia' ? 4 : ancho * 0.3)) / bs.length, x0 = izq + i * ancho + (ancho - bw * bs.length) / 2;
+    bs.forEach((b, k) => {
+      const ic = cereales.indexOf(b.c), x = x0 + k * bw;
+      el('path', { d: barraV(x + (bs.length > 1 ? 0.5 : 0), y(b.v), Math.max(1, bw - (bs.length > 1 ? 1 : 0)), base - y(b.v)), fill: b.prim ? `url(#raya${ic})` : COLOR[b.c], stroke: b.prim ? COLOR[b.c] : 'none', 'stroke-width': b.prim ? 1.5 : 0 }, svg);
+      if (b.v >= tmax * 0.75 && bs.length === 1) txt(num(b.v), { x: x + bw / 2, y: y(b.v) - 5, 'text-anchor': 'middle', 'font-size': 10, fill: '#4A585C' }, svg);
     });
-    const hit = el('rect', { x: xDia(d), y: top, width: ancho, height: base - top, fill: 'transparent' }, svg);
-    hit.addEventListener('mousemove', ev => tip.show(lista.map(p => `<b>${fecha(p.f)} · ${esc(p.c)}</b> · ${p.t}<br>${num(p.ch, 1)} chapas · ${num(p.tn, 1)} tn<br>Gas ${num(p.kg)} kg${hayCosto ? ' · ' + us(p.us, 0) : ''}`).join('<br>'), ev));
+    const hit = el('rect', { x: izq + i * ancho, y: top, width: ancho, height: base - top, fill: 'transparent' }, svg);
+    const html = modo === 'dia'
+      ? c.lista.map(p => `<b>${fecha(p.f)} · ${esc(p.c)}</b> · ${p.t}<br>${num(p.ch, 1)} chapas · ${num(p.tn, 1)} tn<br>Gas ${num(p.kg)} kg${hayCosto ? ' · ' + us(p.us, 0) : ''}`).join('<br>')
+      : `<b>${modo === 'mes' ? mesLargo(c.m) : 'Semana del ' + fmt(c.d).slice(0, 5)}</b><br>` + bs.map(b => `${esc(b.c)}: ${num(b.v)} tn`).join('<br>') + `<br>${c.lista.length} ${c.lista.length === 1 ? 'pasada' : 'pasadas'}`;
+    hit.addEventListener('mousemove', ev => tip.show(html, ev));
     hit.addEventListener('mouseleave', () => tip.hide());
   });
 })();
 
 /* ===== control del gas con los remitos ===== */
-const G = D.gas;
-const entro = G.remitos.reduce((a, r) => a + r.kg, 0);
-const queda = G.inicio ? G.inicio.kg + entro - T.kg : null;
-const dif = G.final && queda !== null ? G.final.kg - queda : null;
-const tolCtl = Math.max(100, T.kg * 0.01);   /* 1 % del consumo, o 3 puntos de reloj */
-const coincide = dif !== null && Math.abs(dif) <= tolCtl;
+const tolDe = kg => Math.max(100, kg * 0.01);   /* 1 % del consumo, o 3 puntos de reloj */
+function control(g, kg) {
+  const entro = g.remitos.reduce((a, r) => a + r.kg, 0);
+  const queda = g.inicio ? g.inicio.kg + entro - kg : null;
+  const dif = g.final && queda !== null ? g.final.kg - queda : null;
+  return { entro, queda, dif, coincide: dif !== null && Math.abs(dif) <= tolDe(kg) };
+}
+const G = D.gas, C = control(G, T.kg);
 (function () {
-  if (!G.inicio) { $('tGasCtl').innerHTML = ''; $('nGasCtl').innerHTML = 'Falta una lectura de los relojes anterior al mes para hacer el control.'; return; }
-  $('tGasCtl').innerHTML = `<tbody>` +
-    `<tr><td>En los tubos al empezar (${G.inicio.f})</td><td>${num(G.inicio.kg)} kg</td></tr>` +
-    G.remitos.map(r => `<tr><td>+ Remito del ${r.f}</td><td>${num(r.kg)} kg</td></tr>`).join('') +
-    `<tr><td>− Consumo según los relojes</td><td>${num(T.kg)} kg</td></tr>` +
-    (G.remitos.length ? `<tr style="font-weight:650"><td>= Tendría que quedar</td><td>${num(queda)} kg</td></tr>` : '') +
-    (G.final ? `<tr><td>Última lectura del mes (${G.final.f})</td><td>${num(G.final.kg)} kg</td></tr>` : '') +
-    `</tbody>` + (dif !== null && G.remitos.length ? `<tfoot><tr><td>Diferencia</td><td>${num(dif)} kg</td></tr></tfoot>` : '');
-  $('nGasCtl').innerHTML = dif === null ? 'Falta la lectura de fin de mes para cerrar el control.'
-    : !G.remitos.length ? `En el mes no hubo cargas de YPF: el consumo sale solo de las lecturas de los relojes y no hay remito contra el cual controlarlo.`
-    : coincide ? `<b>Coincide.</b> La diferencia de ${num(Math.abs(dif))} kg es el ${num(Math.abs(dif) / (T.kg || 1) * 100, 1)} % del consumo del mes, dentro del error de lectura de los relojes (1 punto de reloj = ${num(D.kgPorPunto, 1)} kg). Los ${num(T.kg)} kg de gas del mes quedan confirmados por los remitos de YPF.`
-    : `<b>No coincide.</b> Hay ${num(Math.abs(dif))} kg de diferencia (${num(Math.abs(dif) / (T.kg || 1) * 100, 1)} % del consumo). Puede haber una lectura mal tomada, una carga sin anotar o un remito con otros kg: conviene revisar las lecturas del mes antes de usar este costo.`;
+  if (!G.inicio) { $('tGasCtl').innerHTML = ''; $('nGasCtl').innerHTML = `Falta una lectura de los relojes anterior al ${unMes ? 'mes' : 'período'} para hacer el control.`; }
+  else {
+    $('tGasCtl').innerHTML = `<tbody>` +
+      `<tr><td>En los tubos al empezar (${G.inicio.f})</td><td>${num(G.inicio.kg)} kg</td></tr>` +
+      (G.remitos.length > 4 ? `<tr><td>+ ${G.remitos.length} remitos</td><td>${num(C.entro)} kg</td></tr>` : G.remitos.map(r => `<tr><td>+ Remito del ${r.f}</td><td>${num(r.kg)} kg</td></tr>`).join('')) +
+      `<tr><td>− Consumo según los relojes</td><td>${num(T.kg)} kg</td></tr>` +
+      (G.remitos.length ? `<tr style="font-weight:650"><td>= Tendría que quedar</td><td>${num(C.queda)} kg</td></tr>` : '') +
+      (G.final ? `<tr><td>Última lectura ${unMes ? 'del mes' : 'del período'} (${G.final.f})</td><td>${num(G.final.kg)} kg</td></tr>` : '') +
+      `</tbody>` + (C.dif !== null && G.remitos.length ? `<tfoot><tr><td>Diferencia</td><td>${num(C.dif)} kg</td></tr></tfoot>` : '');
+    $('nGasCtl').innerHTML = C.dif === null ? `Falta la lectura de fin de ${unMes ? 'mes' : 'período'} para cerrar el control.`
+      : !G.remitos.length ? `En ${elPeriodo} no hubo cargas de YPF: el consumo sale solo de las lecturas de los relojes y no hay remito contra el cual controlarlo.`
+      : C.coincide ? `<b>Coincide.</b> La diferencia de ${num(Math.abs(C.dif))} kg es el ${num(Math.abs(C.dif) / (T.kg || 1) * 100, 1)} % del consumo, dentro del error de lectura de los relojes (1 punto de reloj = ${num(D.kgPorPunto, 1)} kg). Los ${num(T.kg)} kg de gas ${unMes ? 'del mes' : 'del período'} quedan confirmados por los remitos de YPF.`
+      : `<b>No coincide.</b> Hay ${num(Math.abs(C.dif))} kg de diferencia (${num(Math.abs(C.dif) / (T.kg || 1) * 100, 1)} % del consumo). Puede haber una lectura mal tomada, una carga sin anotar o un remito con otros kg: conviene revisar las lecturas antes de usar este costo.`;
+  }
+  /* control de cada mes, en un período de varios meses */
+  if (unMes) { $('bCtlMeses').remove(); return; }
+  $('tCtlMeses').innerHTML = `<thead><tr><th>Mes</th><th>Al empezar (kg)</th><th>Remitos (kg)</th><th>Consumo relojes (kg)</th><th>Tendría que quedar (kg)</th><th>Última lectura (kg)</th><th>Diferencia (kg)</th><th class="izq">Control</th></tr></thead><tbody>` +
+    PM.map(r => { const g = r.ctl, c = control(g, r.kg);
+      const estado = !g.inicio || c.dif === null ? 'Faltan lecturas' : !g.remitos.length ? 'Sin cargas' : c.coincide ? 'Coincide' : '<b style="color:#A8642B">No coincide</b>';
+      return `<tr><td>${mesLargo(r.mes)}</td><td>${g.inicio ? num(g.inicio.kg) : '—'}</td><td>${g.remitos.length ? num(c.entro) : '—'}</td><td>${num(r.kg)}</td><td>${c.queda !== null ? num(c.queda) : '—'}</td><td>${g.final ? num(g.final.kg) : '—'}</td><td>${c.dif !== null ? num(c.dif) : '—'}</td><td class="izq">${estado}</td></tr>`; }).join('') + '</tbody>';
 })();
 
 /* ===== gráfico: gas en los tubos ===== */
@@ -987,10 +1086,10 @@ const coincide = dif !== null && Math.abs(dif) <= tolCtl;
   const cont = $('gTubos'), L = D.lecturas.map(l => ({ ...l, d: new Date(l.t.replace(' ', 'T')) }));
   if (L.length < 2) { cont.innerHTML = '<p class="notas">Hacen falta al menos dos lecturas para dibujar el gráfico.</p>'; return; }
   const W = 760, H = 240, izq = 48, der = 10, top = 14, base = H - 26;
-  const t0 = Math.min(new Date(anio, mesN - 1, 1).getTime(), L[0].d.getTime()), t1 = new Date(anio, mesN, 1).getTime();
+  const t0 = Math.min(ini.getTime(), L[0].d.getTime()), t1 = fin.getTime();
   const x = t => izq + (W - izq - der) * (t - t0) / (t1 - t0);
   const kmax = Math.max(G.tubosKg, ...L.map(l => l.kg)), paso = pasoEje(kmax), ymax = Math.ceil(kmax * 1.06 / paso) * paso, y = v => base - (base - top) * v / ymax;
-  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Kilos de propano en los tubos durante ${nomMes}` }, cont);
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Kilos de propano en los tubos durante el período' }, cont);
   for (let v = 0; v < ymax; v += paso) {
     el('line', { x1: izq, x2: W - der, y1: y(v), y2: y(v), stroke: v ? '#E4E8E7' : '#1E2628', 'stroke-width': 1 }, svg);
     txt(num(v), { x: izq - 6, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 10.5, fill: '#6E7B7E' }, svg);
@@ -998,21 +1097,28 @@ const coincide = dif !== null && Math.abs(dif) <= tolCtl;
   txt('kg', { x: izq - 6, y: top - 3, 'text-anchor': 'end', 'font-size': 10.5, fill: '#6E7B7E' }, svg);
   el('line', { x1: izq, x2: W - der, y1: y(G.tubosKg), y2: y(G.tubosKg), stroke: '#6E7B7E', 'stroke-width': 1, 'stroke-dasharray': '4 4' }, svg);
   txt(`tubos llenos ${num(G.tubosKg)} kg`, { x: W - der, y: y(G.tubosKg) - 5, 'text-anchor': 'end', 'font-size': 10.5, fill: '#6E7B7E' }, svg);
-  [1, 5, 10, 15, 20, 25, dias].forEach(d => txt(String(d).padStart(2, '0') + '/' + mm, { x: x(new Date(anio, mesN - 1, d, 12).getTime()), y: H - 8, 'text-anchor': 'middle', 'font-size': 10.5, fill: '#6E7B7E' }, svg));
+  /* eje x: en un mes, días; en varios, el comienzo de cada mes */
+  if (unMes) { const dm = ultimoDia.getDate(), mm = String(ini.getMonth() + 1).padStart(2, '0');
+    [1, 5, 10, 15, 20, 25, dm].forEach(d => txt(String(d).padStart(2, '0') + '/' + mm, { x: x(new Date(ini.getFullYear(), ini.getMonth(), d, 12).getTime()), y: H - 8, 'text-anchor': 'middle', 'font-size': 10.5, fill: '#6E7B7E' }, svg)); }
+  else MS.forEach(m => { const d = new Date(+m.slice(0, 4), +m.slice(5, 7) - 1, 1);
+    el('line', { x1: x(d.getTime()), x2: x(d.getTime()), y1: top, y2: base, stroke: '#E4E8E7', 'stroke-width': 1 }, svg);
+    txt(mesCorto(m), { x: x(d.getTime() + 15 * 86400000), y: H - 8, 'text-anchor': 'middle', 'font-size': 10.5, fill: '#6E7B7E' }, svg); });
   const pts = L.map(l => [x(l.d.getTime()), y(l.kg)]);
   el('path', { d: `M${pts[0][0]},${base}` + pts.map(p => `L${p[0]},${p[1]}`).join('') + `L${pts[pts.length - 1][0]},${base}Z`, fill: '#4A585C', 'fill-opacity': 0.08 }, svg);
   el('polyline', { points: pts.map(p => p.join(',')).join(' '), fill: 'none', stroke: '#4A585C', 'stroke-width': 2, 'stroke-linejoin': 'round' }, svg);
-  L.forEach((l, i) => { if (l.m === 'despues' && l.remito > 0 && i > 0)
+  const pocas = L.filter(l => l.m === 'despues').length <= 6;   /* con muchas cargas no se rotulan todas */
+  L.forEach((l, i) => { if (l.m === 'despues' && l.remito > 0 && i > 0 && pocas)
     txt(`carga ${num(l.remito)} kg`, { x: pts[i][0] + (pts[i][0] > W - 120 ? -6 : 6), y: pts[i][1] - 6, 'text-anchor': pts[i][0] > W - 120 ? 'end' : 'start', 'font-size': 10.5, 'font-weight': 600, fill: '#1E2628' }, svg); });
+  let ultEtiq = -1e9;   /* no se pisan las etiquetas de los mínimos */
   L.forEach((l, i) => { if (l.m === 'antes' && i > 0) {
     el('circle', { cx: pts[i][0], cy: pts[i][1], r: 5, fill: '#A8642B', stroke: '#fff', 'stroke-width': 2 }, svg);
-    const izqT = pts[i][0] > izq + 170;
-    txt(`${num(l.kg)} kg · un tubo al ${num(Math.min(...l.pct))} %`, { x: pts[i][0] + (izqT ? -8 : 8), y: Math.min(base - 4, pts[i][1] + 16), 'text-anchor': izqT ? 'end' : 'start', 'font-size': 10.5, 'font-weight': 600, fill: '#A8642B' }, svg); } });
+    if (pocas && pts[i][0] - ultEtiq > 180) { ultEtiq = pts[i][0]; const izqT = pts[i][0] > izq + 170;
+      txt(`${num(l.kg)} kg · un tubo al ${num(Math.min(...l.pct))} %`, { x: pts[i][0] + (izqT ? -8 : 8), y: Math.min(base - 4, pts[i][1] + 16), 'text-anchor': izqT ? 'end' : 'start', 'font-size': 10.5, 'font-weight': 600, fill: '#A8642B' }, svg); } } });
   const tip = tooltip(cont), TIPO = { antes: 'Antes de la carga', despues: 'Después de la carga', lectura: 'Lectura común' };
   L.forEach((l, i) => {
-    el('circle', { cx: pts[i][0], cy: pts[i][1], r: 3, fill: '#4A585C' }, svg);
+    el('circle', { cx: pts[i][0], cy: pts[i][1], r: L.length > 60 ? 2 : 3, fill: '#4A585C' }, svg);
     const hit = el('circle', { cx: pts[i][0], cy: pts[i][1], r: 10, fill: 'transparent' }, svg);
-    hit.addEventListener('mousemove', ev => tip.show(`<b>${l.t.slice(8, 10)}/${l.t.slice(5, 7)} ${l.t.slice(11, 16)}</b> · ${TIPO[l.m]}<br>${num(l.kg)} kg · tubos ${l.pct.map(v => num(v)).join(' / ')} %`, ev));
+    hit.addEventListener('mousemove', ev => tip.show(`<b>${l.t.slice(8, 10)}/${l.t.slice(5, 7)} ${l.t.slice(11, 16)}</b> · ${TIPO[l.m]}<br>${num(l.kg)} kg · tubos ${l.pct.map(v => num(v)).join(' / ')} %${l.remito ? '<br>Remito ' + num(l.remito) + ' kg' : ''}`, ev));
     hit.addEventListener('mouseleave', () => tip.hide());
   });
 })();
@@ -1020,29 +1126,34 @@ const coincide = dif !== null && Math.abs(dif) <= tolCtl;
 /* ===== para mirar ===== */
 (function () {
   const items = [];
+  const desdeF = D.meses[0], hastaF = D.meses[D.meses.length - 1];
   /* tubos casi vacíos */
   const bajos = []; let enBajo = false;
-  D.lecturas.filter(l => l.t.slice(0, 7) === D.mes).forEach(l => {
+  D.lecturas.filter(l => l.t.slice(0, 7) >= desdeF && l.t.slice(0, 7) <= hastaF).forEach(l => {
     const bajo = Math.min(...l.pct) <= 10 || l.kg < 1500;
     if (bajo && !enBajo) bajos.push(l); else if (bajo && bajos.length && l.kg < bajos[bajos.length - 1].kg) bajos[bajos.length - 1] = l;
     enBajo = bajo;
   });
   if (bajos.length) {
-    const diasSecado = new Set(P.map(p => p.f)).size, porDia = diasSecado ? T.kg / diasSecado : 0;
-    items.push(`<b>${bajos.length === 1 ? 'Una vez' : bajos.length === 2 ? 'Dos veces' : bajos.length + ' veces'} los tubos quedaron casi vacíos.</b> ` +
-      listaY(bajos.map((l, i) => `${i ? 'el' : 'El'} ${l.t.slice(8, 10)}/${l.t.slice(5, 7)} quedaban ${num(l.kg)} kg (un tubo al ${num(Math.min(...l.pct))} %)`)) + '. ' +
+    const diasSecado = new Set(P.map(p => p.f)).size, porDia = diasSecado ? sum(P, 'kg') / diasSecado : 0;
+    const veces = bajos.length === 1 ? 'Una vez' : bajos.length === 2 ? 'Dos veces' : bajos.length + ' veces';
+    items.push(`<b>${veces} los tubos quedaron casi vacíos.</b> ` +
+      (bajos.length <= 4 ? listaY(bajos.map((l, i) => `${i ? 'el' : 'El'} ${l.t.slice(8, 10)}/${l.t.slice(5, 7)} quedaban ${num(l.kg)} kg (un tubo al ${num(Math.min(...l.pct))} %)`)) + '. ' : `El mínimo fue ${num(Math.min(...bajos.map(l => l.kg)))} kg. `) +
       (porDia ? `Con la secadora gastando unos ${num(Math.round(porDia / 50) * 50)} kg por día de secado, conviene pedir la carga cuando el total baje de unos 3.000 kg (cerca del 30 % promedio), para no arriesgar parar la secadora.` : ''));
   }
   /* control de gas */
-  if (dif !== null && !coincide) items.push(`<b>El gas no cierra con los remitos</b> por ${num(Math.abs(dif))} kg. Revisar las lecturas y los remitos del mes.`);
-  if (dif === null && G.inicio) items.push(`<b>Falta la lectura de fin de mes</b> para cerrar el control con los remitos de YPF.`);
+  if (C.dif !== null && G.remitos.length && !C.coincide) items.push(`<b>El gas no cierra con los remitos</b> por ${num(Math.abs(C.dif))} kg. Revisar las lecturas y los remitos.`);
+  if (!unMes) { const malos = PM.filter(r => { const c = control(r.ctl, r.kg); return r.ctl.remitos.length && c.dif !== null && !c.coincide; });
+    if (malos.length) items.push(`<b>No cierra el control de gas en ${listaY(malos.map(r => nomMes(r.mes)))}.</b> Mirá la tabla de control por mes.`); }
+  if (C.dif === null && G.inicio) items.push(`<b>Falta la lectura de fin de ${unMes ? 'mes' : 'período'}</b> para cerrar el control con los remitos de YPF.`);
   if (D.provisorio) items.push(`<b>Costo provisorio:</b> hay una carga sin factura o sin tipo de cambio; se usó el último precio conocido.`);
   /* cereal más caro */
   const conGas = cereales.filter(c => M[c].tn > 0 && M[c].usTp > 0);
   if (conGas.length > 1) {
     const orden = conGas.slice().sort((a, b) => M[b].usTp - M[a].usTp), alto = orden[0], bajo = orden[orden.length - 1];
     const pct = (M[alto].usTp / M[bajo].usTp - 1) * 100;
-    if (pct >= 5) items.push(`<b>${esc(alto)} gastó más gas por punto que ${esc(bajo.toLowerCase())}</b> (${us(M[alto].usTp)} contra ${us(M[bajo].usTp)}, un ${num(pct)} % más). Conviene seguirlo el mes que viene para ver si se repite.`);
+    if (pct >= 5) items.push(`<b>${esc(alto)} gastó más gas por punto que ${esc(bajo.toLowerCase())}</b> (${us(M[alto].usTp)} contra ${us(M[bajo].usTp)}, un ${num(pct)} % más).` +
+      (unMes ? ' Conviene seguirlo el mes que viene para ver si se repite.' : (PM.filter(r => r.cer[alto].usTp > 0 && r.cer[bajo].usTp > 0 && r.cer[alto].usTp > r.cer[bajo].usTp).length === PM.filter(r => r.cer[alto].usTp > 0 && r.cer[bajo].usTp > 0).length && PM.filter(r => r.cer[alto].usTp > 0 && r.cer[bajo].usTp > 0).length > 1 ? ' Se repitió en todos los meses del período.' : '')));
   }
   /* gas sin pasada */
   if (sinP.kg > 50) items.push(`<b>${num(sinP.kg)} kg de gas sin pasada registrada</b>${hayCosto ? ` (${us(sinP.us, 0)})` : ''}: bajó entre dos lecturas sin ninguna pasada en el medio. Puede ser un arranque, una prueba o una pasada que falta cargar.`);
@@ -1057,7 +1168,7 @@ const coincide = dif !== null && Math.abs(dif) <= tolCtl;
       }
     });
     const tn = pool.reduce((s, l) => s + l.tn, 0);
-    if (tn > 10) items.push(`<b>Quedaron ${num(tn, 2)} tn de ${c.toLowerCase()} con una sola pasada</b> (Primera de dos del ${pool.map(l => fecha(l.f)).join(', ')}). Su repaso va a gastar gas el mes que viene.`);
+    if (tn > 10) items.push(`<b>Quedaron ${num(tn, 2)} tn de ${c.toLowerCase()} con una sola pasada</b> (Primera de dos del ${pool.map(l => fecha(l.f)).join(', ')}). Su repaso va a gastar gas ${unMes ? 'el mes que viene' : 'después del período'}.`);
   });
   if (!items.length) { $('bMirar').remove(); return; }
   $('mirar').innerHTML = items.map(i => `<li>${i}</li>`).join('');
@@ -1065,7 +1176,7 @@ const coincide = dif !== null && Math.abs(dif) <= tolCtl;
 
 /* ===== detalle de pasadas ===== */
 $('tPasadas').innerHTML = `<thead><tr><th>Fecha</th><th class="izq">Cereal</th><th class="izq">Tipo</th><th>Chapas</th><th>Toneladas</th><th>Gas (kg)</th><th>Costo gas</th><th>US$ / tn·pto</th></tr></thead><tbody>` +
-  P.map(p => `<tr><td>${fecha(p.f)}</td><td class="izq">${punto(COLOR[p.c])}${esc(p.c)}</td><td class="izq"><span class="tag ${p.t === 'Primera de dos' ? 'primera' : ''}">${p.t}</span></td><td>${num(p.ch, 1)}</td><td>${num(p.tn, 2)}</td><td>${p.kg ? num(p.kg) : '—'}</td><td>${hayCosto && p.kg ? us(p.us, 0) : '—'}</td><td>${hayCosto && p.kg && p.tn ? num(p.us / (p.tn * PUNTOS), 2) : '—'}</td></tr>`).join('') +
+  P.map(p => `<tr><td>${unMes ? fecha(p.f) : fecha(p.f) + '/' + p.f.slice(2, 4)}</td><td class="izq">${punto(COLOR[p.c])}${esc(p.c)}</td><td class="izq"><span class="tag ${p.t === 'Primera de dos' ? 'primera' : ''}">${p.t}</span></td><td>${num(p.ch, 1)}</td><td>${num(p.tn, 2)}</td><td>${p.kg ? num(p.kg) : '—'}</td><td>${hayCosto && p.kg ? us(p.us, 0) : '—'}</td><td>${hayCosto && p.kg && p.tn ? num(p.us / (p.tn * PUNTOS), 2) : '—'}</td></tr>`).join('') +
   `</tbody><tfoot><tr><td>Total</td><td></td><td></td><td>${num(sum(P, 'ch'), 1)}</td><td>${num(T.tn, 2)}</td><td>${num(sum(P, 'kg'))}</td><td>${hayCosto ? us(sum(P, 'us'), 0) : '—'}</td><td>${hayCosto && T.tn ? num(sum(P, 'us') / (T.tn * PUNTOS), 2) : '—'}</td></tr></tfoot>`;
 
 /* ===== cómo se calcula ===== */
@@ -1073,7 +1184,7 @@ $('notas').innerHTML =
   `<p><b>Toneladas.</b> Salen del cubicaje de cada pasada: chapas del silo de origen y forma del grano al empezar y al terminar (copete, enrasado o embudo), con densidad ${D.densidades}. Si un grano pasa dos veces, cuenta las dos.</p>` +
   `<p><b>Puntos.</b> La humedad no se mide en cada pasada: se toma que cada pasada saca 2,5 puntos.</p>` +
   `<p><b>Gas.</b> Lecturas de los relojes de los 3 tubos de ${num(D.litrosTubo)} L (1 punto de reloj = ${num(D.kgPorPunto, 1)} kg de propano). El reloj tiene un error de 1 a 2 puntos, por eso conviene mirar el mes completo y no una lectura suelta.</p>` +
-  `<p><b>Precio.</b> Precio de factura de YPF Gas pasado a dólares con el tipo de cambio de cada factura, promediado con el gas que ya había en los tubos${hayCosto && T.kg ? ` (en ${nomMes}, ${us(T.costo / T.kg, 3)} por kg en promedio)` : ''}.</p>` +
+  `<p><b>Precio.</b> Precio de factura de YPF Gas pasado a dólares con el tipo de cambio de cada factura, promediado con el gas que ya había en los tubos${hayCosto && T.kg ? ` (${unMes ? 'en ' + nomMes(m0) : 'en el período'}, ${us(T.costo / T.kg, 3)} por kg en promedio)` : ''}.</p>` +
   `<p><b>Qué no incluye.</b> Solo el gas. No incluye electricidad, mano de obra, mantenimiento de la secadora ni la merma de peso del grano.</p>`;
 })();
 </script>
@@ -3942,41 +4053,54 @@ function mesesConDatos() {
   return [...m].sort().reverse();
 }
 
-function datosInforme(mes) {
-  const pasadasMes = pasadasCache.filter(p => String(p.Fecha || '').slice(0, 7) === mes)
+/* lecturas para el control del gas de un rango de meses: la última anterior (punto de partida), la última del rango y las cargas */
+function controlGasRango(desde, hasta) {
+  const idx = lecturasGas.map((l, i) => { const m = l.fh.slice(0, 7); return m >= desde && m <= hasta ? i : -1; }).filter(i => i >= 0);
+  /* si no hay lecturas anteriores (la primera que se cargó), se arranca desde la primera del rango */
+  const iIni = idx.length ? (idx[0] > 0 ? idx[0] - 1 : idx[0]) : -1;
+  const ini = iIni >= 0 ? lecturasGas[iIni] : null;
+  const fin = idx.length ? lecturasGas[idx[idx.length - 1]] : null;
+  return {
+    idx, inicio: ini ? { f: fechaInf(ini.fh), kg: stockKg(ini) } : null,
+    final: fin && ini && fin !== ini ? { f: fechaInf(fin.fh), kg: stockKg(fin) } : null,
+    remitos: idx.filter(i => i > iIni).map(i => lecturasGas[i]).filter(l => l.tipo === 'despues' && l.remito > 0).map(l => ({ f: fechaInf(l.fh), kg: l.remito }))
+  };
+}
+const mesSiguiente = m => { const a = +m.slice(0, 4), n = +m.slice(5, 7); return n === 12 ? `${a + 1}-01` : `${a}-${pad2(n + 1)}`; };
+
+function datosInforme(desde, hasta) {
+  if (hasta < desde) [desde, hasta] = [hasta, desde];
+  const meses = []; for (let m = desde; m <= hasta; m = mesSiguiente(m)) meses.push(m);
+  const enRango = f => { const m = String(f || '').slice(0, 7); return m >= desde && m <= hasta; };
+  const pasadasP = pasadasCache.filter(p => enRango(p.Fecha))
     .slice().sort((a, b) => String(a.Fecha).slice(0, 10).localeCompare(String(b.Fecha).slice(0, 10)));
   const g = gasPorPasada(pasadasCache, lecturasGas, facturasGas);
   const cu = costeoGas(lecturasGas, facturasGas, precioFacturaUSD);
-  const cm = cu && cu.meses[mes];
-  const rel = resumenPorMes(lecturasGas)[mes];
-  const pasadas = pasadasMes.map(p => {
+  const rel = resumenPorMes(lecturasGas);
+  const pasadas = pasadasP.map(p => {
     const r = g.porPasada.get(p);
     return { f: String(p.Fecha).slice(0, 10), c: nombreCereal(cerealDeReporte(p.Cereal)), t: TIPOS_PASADA[tipoDePasada(p)],
       ch: Number(p.Chapas) || 0, tn: Number(p.Toneladas) || 0, kg: r ? r.kg : 0, us: r && !r.sinPrecio ? r.costo : 0 };
   });
-  const sp = g.sinPasada.filter(x => x.mes === mes);
-  /* lecturas: la última del mes anterior (punto de partida) y todas las del mes */
-  const idx = lecturasGas.map((l, i) => l.fh.slice(0, 7) === mes ? i : -1).filter(i => i >= 0);
-  const desde = idx.length ? Math.max(idx[0] - 1, 0) : 0;
-  const lects = idx.length ? lecturasGas.slice(desde, idx[idx.length - 1] + 1) : [];
-  const ini = idx.length && idx[0] > 0 ? lecturasGas[idx[0] - 1] : null;
-  const fin = idx.length ? lecturasGas[idx[idx.length - 1]] : null;
-  const ordenC = Object.keys(NOMBRES), cerealesMes = [...new Set(pasadasMes.map(p => cerealDeReporte(p.Cereal)))].sort((a, b) => ((ordenC.indexOf(a) + 1) || 99) - ((ordenC.indexOf(b) + 1) || 99));
+  const ahora = hoyLocal().slice(0, 7);
+  const porMes = meses.map(m => ({ mes: m, enCurso: m >= ahora, kg: rel[m] && rel[m].intervalos ? rel[m].relojKg : 0,
+    us: cu && cu.meses[m] ? cu.meses[m].costo : 0, provisorio: !!(cu && cu.meses[m] && cu.meses[m].provisorio), ctl: controlGasRango(m, m) }));
+  const sp = g.sinPasada.filter(x => x.mes >= desde && x.mes <= hasta);
+  const ctl = controlGasRango(desde, hasta);
+  const lects = ctl.idx.length ? lecturasGas.slice(Math.max(ctl.idx[0] - 1, 0), ctl.idx[ctl.idx.length - 1] + 1) : [];
+  const ordenC = Object.keys(NOMBRES), cerealesP = [...new Set(pasadasP.map(p => cerealDeReporte(p.Cereal)))].sort((a, b) => ((ordenC.indexOf(a) + 1) || 99) - ((ordenC.indexOf(b) + 1) || 99));
   const hoy = new Date();
+  porMes.forEach(r => { delete r.ctl.idx; });
   return {
-    mes, enCurso: mes >= hoyLocal().slice(0, 7), puntos: PUNTOS_POR_PASADA, logo: typeof LOGO_SRC !== 'undefined' ? LOGO_SRC : '',
+    meses, enCurso: hasta >= ahora, puntos: PUNTOS_POR_PASADA, logo: typeof LOGO_SRC !== 'undefined' ? LOGO_SRC : '',
     emitido: `${pad2(hoy.getDate())}/${pad2(hoy.getMonth() + 1)}/${hoy.getFullYear()}`,
-    pasadas, totalKg: rel && rel.intervalos ? rel.relojKg : 0, totalUs: cm ? cm.costo : 0, provisorio: !!(cm && cm.provisorio),
+    pasadas, porMes,
+    totalKg: porMes.reduce((a, r) => a + r.kg, 0), totalUs: porMes.reduce((a, r) => a + r.us, 0), provisorio: porMes.some(r => r.provisorio),
     sinPasada: { kg: sp.reduce((a, x) => a + x.kg, 0), us: sp.reduce((a, x) => a + (x.costo || 0), 0) },
-    gas: {
-      inicio: ini ? { f: fechaInf(ini.fh), kg: stockKg(ini) } : null,
-      final: fin && ini ? { f: fechaInf(fin.fh), kg: stockKg(fin) } : null,
-      remitos: lecturasGas.filter(l => l.fh.slice(0, 7) === mes && l.tipo === 'despues' && l.remito > 0).map(l => ({ f: fechaInf(l.fh), kg: l.remito })),
-      tubosKg: IDS_TUBO.reduce((a, id) => a + kgDe(id, 100), 0)
-    },
+    gas: { inicio: ctl.inicio, final: ctl.final, remitos: ctl.remitos, tubosKg: IDS_TUBO.reduce((a, id) => a + kgDe(id, 100), 0) },
     lecturas: lects.map(l => ({ t: l.fh, kg: stockKg(l), pct: IDS_TUBO.map(id => l.pct[id]), m: l.tipo, remito: l.remito })),
     kgPorPunto: kgDe('T1', 1), litrosTubo: TUBOS_GAS.T1.litros,
-    densidades: (cerealesMes.length ? cerealesMes : ['maiz', 'soja'])
+    densidades: (cerealesP.length ? cerealesP : ['maiz', 'soja'])
       .map(c => `${num(DENSIDAD[c] || 0.7, 2)} t/m³ para ${nombreCereal(c).toLowerCase()}`)
       .reduce((txt, x, i, a) => txt + (i === 0 ? '' : i === a.length - 1 ? ' y ' : ', ') + x, '')
   };
@@ -3986,14 +4110,16 @@ function htmlInforme(d) {
   const t = id => document.getElementById(id).textContent;
   const datos = JSON.stringify(d).replace(/</g, '\\u003c');
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">` +
-    `<title>Informe de secado ${d.mes}</title><style>${t('tplInformeCss')}</style></head><body>${t('tplInformeHtml')}` +
+    `<title>Informe de secado ${d.meses[0]}${d.meses.length > 1 ? ' a ' + d.meses[d.meses.length - 1] : ''}</title><style>${t('tplInformeCss')}</style></head><body>${t('tplInformeHtml')}` +
     `<script>window.D = ${datos};<\/script><script>${t('tplInformeJs')}<\/script></body></html>`;
 }
 
-function pintarInforme() {
-  const mes = $('infMes').value;
-  if (!mes) return;
-  informeHtml = htmlInforme(datosInforme(mes));
+function pintarInforme(cambio) {
+  let desde = $('infDesde').value, hasta = $('infHasta').value;
+  if (!desde || !hasta) return;
+  /* si se cruzan, se acomoda el otro extremo */
+  if (desde > hasta) { if (cambio === 'hasta') { desde = hasta; $('infDesde').value = desde; } else { hasta = desde; $('infHasta').value = hasta; } }
+  informeHtml = htmlInforme(datosInforme(desde, hasta));
   $('infMarco').srcdoc = informeHtml;
 }
 
@@ -4011,16 +4137,21 @@ async function abrirInforme() {
     $('infEstado').textContent = 'No se pudo leer la Sheet: se usan los últimos datos cargados en este equipo.';
   }
   const meses = mesesConDatos();
-  if (!meses.length) { $('infMes').innerHTML = ''; $('infEstado').textContent = 'Todavía no hay pasadas ni lecturas de gas cargadas.'; return; }
-  const ahora = hoyLocal().slice(0, 7), previo = $('infMes').value;
-  /* por defecto, el último mes cerrado; si no hay, el más reciente */
-  const def = meses.includes(previo) ? previo : (meses.find(m => m < ahora) || meses[0]);
-  $('infMes').innerHTML = meses.map(m => `<option value="${m}">${nombreMes(m).replace(/^./, c => c.toUpperCase())} ${m.slice(0, 4)}${m === ahora ? ' (en curso)' : ''}</option>`).join('');
-  $('infMes').value = def;
+  if (!meses.length) { $('infDesde').innerHTML = $('infHasta').innerHTML = ''; $('infEstado').textContent = 'Todavía no hay pasadas ni lecturas de gas cargadas.'; return; }
+  const ahora = hoyLocal().slice(0, 7), pDesde = $('infDesde').value, pHasta = $('infHasta').value;
+  /* por defecto, el último mes cerrado (desde y hasta iguales); si no hay, el más reciente */
+  const def = meses.find(m => m < ahora) || meses[0];
+  /* también los meses intermedios sin datos, para que el rango sea continuo */
+  const todos = []; for (let m = meses[meses.length - 1]; m <= meses[0]; m = mesSiguiente(m)) todos.unshift(m);
+  const opciones = todos.map(m => `<option value="${m}">${nombreMes(m).replace(/^./, c => c.toUpperCase())} ${m.slice(0, 4)}${m === ahora ? ' (en curso)' : ''}</option>`).join('');
+  $('infDesde').innerHTML = opciones; $('infHasta').innerHTML = opciones;
+  $('infDesde').value = todos.includes(pDesde) ? pDesde : def;
+  $('infHasta').value = todos.includes(pHasta) ? pHasta : def;
   pintarInforme();
 }
 
-$('infMes').addEventListener('change', pintarInforme);
+$('infDesde').addEventListener('change', () => pintarInforme('desde'));
+$('infHasta').addEventListener('change', () => pintarInforme('hasta'));
 $('infCerrar').onclick = () => $('visorInforme').classList.remove('abierto');
 $('infImprimir').onclick = () => { const w = $('infMarco').contentWindow; if (w) { w.focus(); w.print(); } };
 $('infAparte').onclick = () => {
