@@ -198,6 +198,8 @@
   .visor-informe .barra button { padding: 7px 14px; font-size: 13px; border: 1px solid var(--ink); background: #fff; color: var(--ink); }
   .visor-informe .barra button.fuerte { background: var(--ink); color: #fff; }
   .visor-informe .barra .estado { font-size: 12px; color: var(--tenue); }
+  .visor-informe .barra .tarifa { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 12px; color: var(--steel); padding: 3px 0 3px 10px; border-left: 1px solid var(--linea); }
+  .visor-informe .barra .tarifa input { width: 52px; padding: 4px 5px; border: 1px solid var(--linea); font: inherit; font-size: 13px; color: var(--ink); text-align: right; }
   .visor-informe .barra .der { margin-left: auto; display: flex; gap: 8px; }
   .visor-informe iframe { flex: 1; width: 100%; border: 0; background: #F4F5F4; }
   @media print { .visor-informe { display: none !important; } }
@@ -660,6 +662,12 @@
     <b>Informe de secado</b>
     <label class="estado">Desde <select id="infDesde" aria-label="Desde el mes"></select></label>
     <label class="estado">Hasta <select id="infHasta" aria-label="Hasta el mes"></select></label>
+    <span class="tarifa" title="Condiciones que se le cobran al productor por tonelada">
+      Cobro al productor:
+      <label><input type="number" id="tfLibres" min="0" step="0.5" inputmode="decimal"> pto. libre</label>
+      <label>1er punto US$ <input type="number" id="tfPrimero" min="0" step="0.1" inputmode="decimal"></label>
+      <label>excedente US$ <input type="number" id="tfExcedente" min="0" step="0.1" inputmode="decimal"></label>
+    </span>
     <span class="estado" id="infEstado"></span>
     <div class="der">
       <button id="infImprimir" class="fuerte">Imprimir / PDF</button>
@@ -727,6 +735,8 @@
   .notas p { margin: 0 0 6px; }
   .tag { display: inline-block; font-size: 10.5px; padding: 0 5px; border: 1px solid var(--linea); border-radius: 2px; color: var(--steel); white-space: nowrap; }
   .tag.primera { border-style: dashed; }
+  .neg { color: #A8642B; font-weight: 650; }
+  .pos { color: #2E6B4F; font-weight: 650; }
   footer { margin-top: 26px; padding-top: 10px; border-top: 1px solid var(--suave); font-size: 11px; color: var(--tenue); display: flex; justify-content: space-between; gap: 12px; }
   .salto { break-before: page; }
   .imprimir { position: fixed; right: 16px; bottom: 16px; padding: 9px 16px; font: inherit; font-size: 13px; background: var(--ink); color: #fff; border: 0; cursor: pointer; }
@@ -750,7 +760,10 @@
     h2 + .bajada, .leyenda { break-after: avoid; }
     .dos, .notas, footer { break-inside: avoid; }
     footer { break-before: avoid; margin-top: 14px; }
-    .fin, #bMeses, #bCtlMeses { break-inside: avoid; }
+    .fin, #bMeses, #bCtlMeses, #bQuiebre { break-inside: avoid; }
+    table#tPasadas { break-inside: auto; }
+    #tPasadas tr { break-inside: avoid; }
+    #tPasadas thead { display: table-header-group; }
     .fin h2 { margin-top: 18px; }
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
@@ -777,6 +790,15 @@
   <div class="ancho"><table id="tCereal"></table></div>
 </div>
 <div class="ejemplo" id="ejemplo"></div>
+
+<div id="bQuiebre">
+<h2>Punto de quiebre: lo que se cobra contra el gas</h2>
+<p class="bajada" id="bajQuiebre"></p>
+<div class="leyenda" id="lQuiebre"></div>
+<div class="grafico" id="gQuiebre"></div>
+<div class="ancho"><table id="tQuiebre"></table></div>
+<p class="resumen" id="rQuiebre" style="font-size:14px;margin-top:12px"></p>
+</div>
 
 <div id="bMeses">
 <h2>Mes por mes</h2>
@@ -808,7 +830,7 @@
 <ol class="mirar" id="mirar"></ol>
 </div>
 
-<h2 class="salto">Detalle de pasadas</h2>
+<h2>Detalle de pasadas</h2>
 <p class="bajada">El gas de cada pasada sale de los relojes de los tubos: lo que bajó entre dos lecturas se reparte entre las pasadas de ese tramo según sus toneladas. Por eso una pasada suelta puede salir más cara o más barata que otra; el número confiable es el total del mes.</p>
 <div class="ancho"><table id="tPasadas"></table></div>
 
@@ -857,7 +879,7 @@ function tooltip(cont) {
 }
 function barraV(x, y, w, h, r = 4) { r = Math.min(r, h, w / 2); return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`; }
 function barraH(x, y, w, h, r = 4) { r = Math.min(r, w, h / 2); return `M${x},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h - r}Q${x + w},${y + h} ${x + w - r},${y + h}H${x}Z`; }
-const pasoEje = max => { const b = [0.25, 0.5, 1, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000]; return b.find(p => max / p <= 5) || 10000; };
+const pasoEje = max => { const b = [0.25, 0.5, 1, 2, 2.5, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000]; return b.find(p => max / p <= 5) || 10000; };
 
 /* ===== período ===== */
 const MS = D.meses, unMes = MS.length === 1, m0 = MS[0], m1 = MS[MS.length - 1];
@@ -960,6 +982,89 @@ $('tCereal').innerHTML = `<thead><tr><th>Cereal</th><th>Tn pasadas</th><th>Gas (
   const c0 = cereales[0];
   $('ejemplo').innerHTML = `<b>Gas por tonelada de grano:</b> con una pasada (2,5 puntos) ${una}; con dos pasadas (5 puntos) ${dos}. ` +
     `Ejemplo: 100 tn de ${c0.toLowerCase()} con dos pasadas gastan 100 × 5 × ${us(M[c0].usTp)} = ${us(100 * 2 * PUNTOS * M[c0].usTp, 0)} de gas.`;
+})();
+
+/* ===== punto de quiebre: tarifa al productor contra el gas ===== */
+const TF = D.tarifa;   /* { libres, primero, excedente }: puntos sin cargo, US$ del primer punto cobrado, US$ de cada punto excedente */
+/* se cobra por punto entero: cualquier fracción cuenta como punto completo (en maíz, 15,6 % y 16,5 % se cobran igual) */
+const puntosCobrados = p => p > 0 ? Math.ceil(p - 1e-9) : 0;
+function cobroPorTn(p) {
+  const n = puntosCobrados(p);
+  if (n <= TF.libres) return 0;
+  return TF.primero * Math.min(n - TF.libres, 1) + TF.excedente * Math.max(n - TF.libres - 1, 0);
+}
+/* cómo se dice el quiebre: justo pasando un entero, "más de N puntos"; si no, el décimo de arriba */
+const textoQuiebre = q => q - Math.floor(q) <= 0.02 ? `más de ${num(Math.floor(q))} ${Math.floor(q) === 1 ? 'punto' : 'puntos'}` : `${num(Math.ceil(q * 10 - 1e-9) / 10, 1)} puntos`;
+/* primer punto desde el cual el cobro cubre el gas y lo sigue cubriendo */
+function quiebre(costoTp) {
+  if (!(costoTp > 0)) return null;
+  /* se busca de a 0,01 punto y se redondea para arriba al décimo, para no marcar un quiebre donde todavía falta */
+  for (let i = 1; i <= 1000; i++) {
+    const p = i / 100;
+    let ok = true; for (let k = 0; k <= 200 && ok; k++) { const pp = p + k * 0.05; if (cobroPorTn(pp) < costoTp * pp - 1e-9) ok = false; }
+    if (ok) return p;
+  }
+  return null;
+}
+(function () {
+  if (!hayCosto || !tnPts || !TF) { $('bQuiebre').remove(); return; }
+  const condic = `${num(TF.libres, TF.libres % 1 ? 1 : 0)} ${TF.libres === 1 ? 'punto libre' : 'puntos libres'}, después ${us(TF.primero)} el primer punto y ${us(TF.excedente)} cada punto excedente (por tonelada)`;
+  $('bajQuiebre').innerHTML = `Por tonelada, según los puntos de humedad sobre la tolerancia. Condiciones al productor: <b>${condic}</b>; se cobra por punto entero. El gas, al costo por tonelada y punto ${unMes ? 'del mes' : 'del período'}.`;
+  const series = [{ et: 'Cobro al productor', color: '#1E2628', f: cobroPorTn, ancho: 2.5 },
+    ...cereales.filter(c => M[c].usTp > 0).map(c => ({ et: 'Gas ' + c.toLowerCase(), c, color: COLOR[c], f: p => p * M[c].usTp, ancho: 2 }))];
+  $('lQuiebre').innerHTML = series.map(s => `<span>${punto(s.color)}${esc(s.et)}</span>`).join('');
+  const Q = Object.fromEntries(cereales.map(c => [c, quiebre(M[c].usTp)]));
+  /* gráfico */
+  const cont = $('gQuiebre'), W = 760, H = 270, izq = 40, der = 100, top = 16, base = H - 30, pmin = 0, pmax = 6;
+  const ymaxV = Math.max(...series.map(s => s.f(pmax))), paso = pasoEje(ymaxV * 1.1), ymax = Math.ceil(ymaxV * 1.1 / paso) * paso;
+  const x = p => izq + (W - izq - der) * (p - pmin) / (pmax - pmin), y = v => base - (base - top) * v / ymax;
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Cobro al productor y costo de gas por tonelada según los puntos de humedad' }, cont);
+  for (let v = 0; v < ymax; v += paso) {
+    el('line', { x1: izq, x2: W - der, y1: y(v), y2: y(v), stroke: v ? '#E4E8E7' : '#1E2628', 'stroke-width': 1 }, svg);
+    txt(num(v), { x: izq - 6, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 10.5, fill: '#6E7B7E' }, svg);
+  }
+  txt('US$/tn', { x: izq - 6, y: top - 4, 'text-anchor': 'end', 'font-size': 10.5, fill: '#6E7B7E' }, svg);
+  for (let p = 0; p <= pmax; p++) txt(p === 1 ? '1 punto' : p + ' puntos', { x: x(p), y: H - 10, 'text-anchor': 'middle', 'font-size': 10.5, fill: '#6E7B7E' }, svg);
+  [[PUNTOS, 'una pasada'], [2 * PUNTOS, 'dos pasadas']].forEach(([p, et]) => {
+    el('line', { x1: x(p), x2: x(p), y1: top, y2: base, stroke: '#B9C1C0', 'stroke-width': 1, 'stroke-dasharray': '3 3' }, svg);
+    txt(et, { x: x(p) + 4, y: top + 8, 'font-size': 10.5, fill: '#6E7B7E' }, svg);
+  });
+  const xs = []; for (let i = 0; i <= (pmax - pmin) * 200; i++) xs.push(pmin + i / 200);
+  /* zona de pérdida: entre el cobro y el gas más barato, donde el cobro queda abajo */
+  series.forEach(s => el('polyline', { points: xs.map(p => `${x(p)},${y(s.f(p))}`).join(' '), fill: 'none', stroke: s.color, 'stroke-width': s.ancho, 'stroke-linejoin': 'round' }, svg));
+  /* quiebres */
+  series.filter(s => s.c && Q[s.c] !== null && Q[s.c] <= pmax).forEach((s, i) => {
+    const p = Q[s.c], v = s.f(p);
+    el('circle', { cx: x(p), cy: y(v), r: 5.5, fill: s.color, stroke: '#fff', 'stroke-width': 2 }, svg);
+    txt(`quiebre ${s.c.toLowerCase()}: ${textoQuiebre(p)}`, i % 2 === 0 ? { x: x(p) - 8, y: y(v) - 10, 'text-anchor': 'end', 'font-size': 10.5, 'font-weight': 650, fill: '#1E2628' } : { x: x(p) + 8, y: y(v) + 18, 'font-size': 10.5, 'font-weight': 650, fill: '#1E2628' }, svg);
+  });
+  const fin = series.map(s => ({ s, v: s.f(pmax), yy: y(s.f(pmax)) })).sort((a, b) => a.yy - b.yy);
+  for (let i = 1; i < fin.length; i++) if (fin[i].yy - fin[i - 1].yy < 14) fin[i].yy = fin[i - 1].yy + 14;
+  fin.forEach(f => txt(`${f.s.et.replace('Cobro al productor', 'Cobro')} ${num(f.v, 2)}`, { x: x(pmax) + 8, y: f.yy + 4, 'font-size': 11, 'font-weight': 600, fill: '#1E2628' }, svg));
+  const tip = tooltip(cont), guia = el('line', { y1: top, y2: base, stroke: '#4A585C', 'stroke-width': 1, opacity: 0 }, svg);
+  const hit = el('rect', { x: izq, y: top, width: W - izq - der, height: base - top, fill: 'transparent' }, svg);
+  hit.addEventListener('mousemove', ev => {
+    const r = svg.getBoundingClientRect(), px = (ev.clientX - r.left) * W / r.width;
+    const p = Math.min(pmax, Math.max(pmin, Math.round(((px - izq) / (W - izq - der) * (pmax - pmin) + pmin) * 2) / 2));
+    guia.setAttribute('x1', x(p)); guia.setAttribute('x2', x(p)); guia.setAttribute('opacity', 1);
+    const cb = cobroPorTn(p);
+    tip.show(`<b>${num(p, 1)} puntos</b> (se cobran ${puntosCobrados(p)})<br>Cobro ${us(cb)}/tn` + series.filter(s => s.c).map(s => `<br>${esc(s.et)} ${us(s.f(p))} · ${cb - s.f(p) >= 0 ? 'queda' : 'falta'} ${us(Math.abs(cb - s.f(p)))}`).join(''), ev);
+  });
+  hit.addEventListener('mouseleave', () => { tip.hide(); guia.setAttribute('opacity', 0); });
+  /* tabla */
+  const cs = cereales.filter(c => M[c].usTp > 0);
+  const filas = [[1, ''], [1.5, ''], [2, ''], [PUNTOS, 'una pasada'], [3, ''], [3.5, ''], [4, ''], [2 * PUNTOS, 'dos pasadas'], [6, '']].filter((f, i, a) => a.findIndex(g => g[0] === f[0]) === i).sort((a, b) => a[0] - b[0]);
+  const res = v => `<span class="${v < 0 ? 'neg' : 'pos'}">${v < 0 ? '−' : ''}${num(Math.abs(v), 2)}</span>`;
+  $('tQuiebre').innerHTML = `<thead><tr><th>Puntos sobre tolerancia</th><th>Puntos que se cobran</th><th>Cobro (US$/tn)</th>${cs.map(c => `<th>Gas ${esc(c.toLowerCase())}</th><th>Resultado ${esc(c.toLowerCase())}</th>`).join('')}</tr></thead><tbody>` +
+    filas.map(([p, et]) => { const cb = cobroPorTn(p);
+      return `<tr${et ? ' style="font-weight:650"' : ''}><td>${num(p, 1)}${et ? ` <span class="tag">${et}</span>` : ''}</td><td>${puntosCobrados(p)}</td><td>${num(cb, 2)}</td>${cs.map(c => `<td>${num(p * M[c].usTp, 2)}</td><td>${res(cb - p * M[c].usTp)}</td>`).join('')}</tr>`; }).join('') + '</tbody>';
+  /* lectura */
+  const frases = cs.map(c => Q[c] === null ? `en ${c.toLowerCase()} no se cubre hasta 10 puntos` : `en ${c.toLowerCase()} con ${textoQuiebre(Q[c]).replace(/^más de /, 'más de <b>').replace(/ puntos?$/, m => '</b>' + m).replace(/^(\d)/, '<b>$1')}`.replace(/(\d) puntos$/, '$1</b> puntos'));
+  const una = cs.map(c => ({ c, v: cobroPorTn(PUNTOS) - PUNTOS * M[c].usTp })), dos = cs.map(c => ({ c, v: cobroPorTn(2 * PUNTOS) - 2 * PUNTOS * M[c].usTp }));
+  const dice = (l, n) => listaY(l.map(o => `${o.v < 0 ? 'faltan' : 'quedan'} ${us(Math.abs(o.v))} en ${o.c.toLowerCase()}`));
+  $('rQuiebre').innerHTML = `Con estas condiciones, lo que se cobra cubre siempre el gas ${listaY(frases)} de humedad sobre la tolerancia; por debajo depende de la fracción de punto (ver la tabla). ` +
+    `Con una pasada (2,5 puntos, se cobran ${puntosCobrados(PUNTOS)}) entran ${us(cobroPorTn(PUNTOS))} por tonelada: ${dice(una)}. ` +
+    `Con dos pasadas (5 puntos) entran ${us(cobroPorTn(2 * PUNTOS))}: ${dice(dos)}. Como se cobra por punto entero, el caso más ajustado es cuando la humedad cae justo en un entero: 3,0 puntos se cobran igual que 2,1 pero gastan más gas. Solo se compara contra el gas.`;
 })();
 
 /* ===== mes por mes (solo en un período de varios meses) ===== */
@@ -1185,6 +1290,7 @@ $('notas').innerHTML =
   `<p><b>Puntos.</b> La humedad no se mide en cada pasada: se toma que cada pasada saca 2,5 puntos.</p>` +
   `<p><b>Gas.</b> Lecturas de los relojes de los 3 tubos de ${num(D.litrosTubo)} L (1 punto de reloj = ${num(D.kgPorPunto, 1)} kg de propano). El reloj tiene un error de 1 a 2 puntos, por eso conviene mirar el mes completo y no una lectura suelta.</p>` +
   `<p><b>Precio.</b> Precio de factura de YPF Gas pasado a dólares con el tipo de cambio de cada factura, promediado con el gas que ya había en los tubos${hayCosto && T.kg ? ` (${unMes ? 'en ' + nomMes(m0) : 'en el período'}, ${us(T.costo / T.kg, 3)} por kg en promedio)` : ''}.</p>` +
+  (D.tarifa ? `<p><b>Cobro al productor.</b> Puntos de humedad sobre la tolerancia, con las condiciones cargadas en la app al emitir el informe: ${num(D.tarifa.libres, D.tarifa.libres % 1 ? 1 : 0)} ${D.tarifa.libres === 1 ? 'punto libre' : 'puntos libres'}, ${us(D.tarifa.primero)} el primer punto cobrado y ${us(D.tarifa.excedente)} cada punto siguiente, por tonelada. Se cobra por punto entero: cualquier fracción cuenta como punto completo.</p>` : '') +
   `<p><b>Qué no incluye.</b> Solo el gas. No incluye electricidad, mano de obra, mantenimiento de la secadora ni la merma de peso del grano.</p>`;
 })();
 </script>
@@ -4053,6 +4159,20 @@ function mesesConDatos() {
   return [...m].sort().reverse();
 }
 
+/* condiciones de cobro al productor (editables en el informe; se guardan en este equipo) */
+const TARIFA_DEF = { libres: 1, primero: 2, excedente: 3 };
+function tarifaProductor() {
+  const g = lsLeer('tarifaProductor', null) || {};
+  const v = k => { const n = Number(g[k]); return Number.isFinite(n) && n >= 0 ? n : TARIFA_DEF[k]; };
+  return { libres: v('libres'), primero: v('primero'), excedente: v('excedente') };
+}
+function mostrarTarifa() { const tf = tarifaProductor(); $('tfLibres').value = tf.libres; $('tfPrimero').value = tf.primero; $('tfExcedente').value = tf.excedente; }
+['tfLibres', 'tfPrimero', 'tfExcedente'].forEach(id => $(id).addEventListener('change', () => {
+  const n = s => { const x = Number(String($(s).value).replace(',', '.')); return Number.isFinite(x) && x >= 0 ? x : null; };
+  const tf = tarifaProductor(), nuevo = { libres: n('tfLibres') ?? tf.libres, primero: n('tfPrimero') ?? tf.primero, excedente: n('tfExcedente') ?? tf.excedente };
+  lsGuardar('tarifaProductor', nuevo); mostrarTarifa(); pintarInforme();
+}));
+
 /* lecturas para el control del gas de un rango de meses: la última anterior (punto de partida), la última del rango y las cargas */
 function controlGasRango(desde, hasta) {
   const idx = lecturasGas.map((l, i) => { const m = l.fh.slice(0, 7); return m >= desde && m <= hasta ? i : -1; }).filter(i => i >= 0);
@@ -4094,7 +4214,7 @@ function datosInforme(desde, hasta) {
   return {
     meses, enCurso: hasta >= ahora, puntos: PUNTOS_POR_PASADA, logo: typeof LOGO_SRC !== 'undefined' ? LOGO_SRC : '',
     emitido: `${pad2(hoy.getDate())}/${pad2(hoy.getMonth() + 1)}/${hoy.getFullYear()}`,
-    pasadas, porMes,
+    pasadas, porMes, tarifa: tarifaProductor(),
     totalKg: porMes.reduce((a, r) => a + r.kg, 0), totalUs: porMes.reduce((a, r) => a + r.us, 0), provisorio: porMes.some(r => r.provisorio),
     sinPasada: { kg: sp.reduce((a, x) => a + x.kg, 0), us: sp.reduce((a, x) => a + (x.costo || 0), 0) },
     gas: { inicio: ctl.inicio, final: ctl.final, remitos: ctl.remitos, tubosKg: IDS_TUBO.reduce((a, id) => a + kgDe(id, 100), 0) },
@@ -4145,6 +4265,7 @@ async function abrirInforme() {
   const todos = []; for (let m = meses[meses.length - 1]; m <= meses[0]; m = mesSiguiente(m)) todos.unshift(m);
   const opciones = todos.map(m => `<option value="${m}">${nombreMes(m).replace(/^./, c => c.toUpperCase())} ${m.slice(0, 4)}${m === ahora ? ' (en curso)' : ''}</option>`).join('');
   $('infDesde').innerHTML = opciones; $('infHasta').innerHTML = opciones;
+  mostrarTarifa();
   $('infDesde').value = todos.includes(pDesde) ? pDesde : def;
   $('infHasta').value = todos.includes(pHasta) ? pHasta : def;
   pintarInforme();
